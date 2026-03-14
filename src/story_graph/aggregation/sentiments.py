@@ -1,7 +1,7 @@
-from story_graph.aggregation.normalization import normalize_name
+from story_graph.aggregation.character_registry import CharacterRegistry
 
 
-def aggregate_sentiments(results):
+def aggregate_sentiments(results, registry: CharacterRegistry):
 
     edges = {}
 
@@ -9,8 +9,8 @@ def aggregate_sentiments(results):
 
         for s in result.sentiments:
 
-            source = normalize_name(s.source)
-            target = normalize_name(s.target)
+            source = registry.resolve(s.source)
+            target = registry.resolve(s.target)
 
             key = (source, target, s.sentiment)
 
@@ -19,8 +19,8 @@ def aggregate_sentiments(results):
                     "source": source,
                     "target": target,
                     "sentiment": s.sentiment,
-                    "evidence": set()
+                    "evidence": []
                 }
-            edges[key]["evidence"].add(s.evidence)
+            edges[key]["evidence"].append((s.evidence, s.position))
 
     return list(edges.values())

@@ -19,7 +19,7 @@ async def main():
     paragraphs = split_paragraphs(text)
 
     chunks = chunk_paragraphs(paragraphs)
-    filtered_chunks = [c for c in chunks if has_character_interaction(c)]
+    filtered_chunks = [c for c in chunks if has_character_interaction(c['text'])]
 
     print("Paragraphs:", len(paragraphs))
     print("Chunks:", len(chunks))
@@ -35,9 +35,20 @@ async def main():
     print("Relationships:", total_relationships)
     print("Sentiments:", total_sentiments)
 
+    for i, result in enumerate(results):
+        print(f"\nChunk {i} relationships:")
+        for r in result.relationships:
+            print(f"  {r}")
+
     registry, relationships, sentiments = aggregate(results)
+
+    # Write aggregate output to disk for inspection (avoids relying on stdout)
+    import json
+    with open('debug_relationships.json', 'w', encoding='utf-8') as f:
+        json.dump(relationships, f, ensure_ascii=False, indent=2)
+
     G = build_graph(registry, relationships, sentiments)
-    visualize_graph(G)
+    visualize_graph(G, total_chunks=len(filtered_chunks))
     print_graph(G)
     # print("\n--- Aggregated ---")
     #

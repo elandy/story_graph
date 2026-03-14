@@ -53,6 +53,12 @@
         <div class="card" style="width: 100%">
             
             
+                        <div id="time-slider-container" class="card-header" style="padding: 1rem; background: #333;">
+                <label for="timeSlider" style="color: #eee;">Story progression (chunk):</label>
+                <input type="range" id="timeSlider" min="0" max="2" value="2" style="width: 300px; margin-left: 10px; vertical-align: middle;">
+                <span id="timeValue" style="color: #eee; margin-left: 10px;">2</span>
+            </div>
+            
             <div id="mynetwork" class="card-body"></div>
         </div>
 
@@ -88,8 +94,8 @@
                   
 
                   // parsing and collecting nodes and edges from the python
-                  nodes = new vis.DataSet([{"color": "#97c2fc", "font": {"color": "white"}, "id": "harry", "label": "Harry", "shape": "dot", "size": 20, "title": "Harry\nAliases: Harry"}, {"color": "#97c2fc", "font": {"color": "white"}, "id": "ron", "label": "Ron", "shape": "dot", "size": 20, "title": "Ron\nAliases: Ron"}, {"color": "#97c2fc", "font": {"color": "white"}, "id": "hermione", "label": "Hermione", "shape": "dot", "size": 20, "title": "Hermione\nAliases: Hermione"}, {"color": "#97c2fc", "font": {"color": "white"}, "id": "snape", "label": "Snape", "shape": "dot", "size": 20, "title": "Snape\nAliases: Snape"}, {"color": "#97c2fc", "font": {"color": "white"}, "id": "dumbledore", "label": "Dumbledore", "shape": "dot", "size": 20, "title": "Dumbledore\nAliases: Dumbledore"}]);
-                  edges = new vis.DataSet([{"arrows": "to", "from": "harry", "label": "friend", "title": "Evidence:\n- They had been best friends since their first year at Hogwarts.\n", "to": "ron"}, {"arrows": "to", "from": "hermione", "label": "colleague", "title": "Evidence:\n- Hermione shook her head at her two classmates.\n", "to": "harry"}, {"arrows": "to", "from": "hermione", "label": "colleague", "title": "Evidence:\n- Hermione shook her head at her two classmates.\n", "to": "ron"}, {"arrows": "to", "from": "snape", "label": "teacher", "title": "Evidence:\n- Snape was one of their professors\n", "to": "harry"}, {"arrows": "to", "from": "snape", "label": "teacher", "title": "Evidence:\n- Snape was one of their professors\n", "to": "ron"}, {"arrows": "to", "from": "snape", "label": "teacher", "title": "Evidence:\n- Snape was one of their professors\n", "to": "hermione"}, {"arrows": "to", "from": "snape", "label": "rival", "title": "Evidence:\n- Snape was always trying to get his job.\n", "to": "dumbledore"}, {"arrows": "to", "from": "dumbledore", "label": "leader", "title": "Evidence:\n- Dumbledore was the director of the school\n", "to": "snape"}]);
+                  nodes = new vis.DataSet([{"color": "#97c2fc", "font": {"color": "white"}, "id": "larry", "label": "Larry", "shape": "dot", "size": 20, "title": "Larry\nAliases: Larry"}, {"color": "#97c2fc", "font": {"color": "white"}, "id": "don", "label": "Don", "shape": "dot", "size": 20, "title": "Don\nAliases: Donnie, Don"}, {"color": "#97c2fc", "font": {"color": "white"}, "id": "penelope", "label": "Penelope", "shape": "dot", "size": 20, "title": "Penelope\nAliases: Penelope"}, {"color": "#97c2fc", "font": {"color": "white"}, "id": "slate", "label": "Slate", "shape": "dot", "size": 20, "title": "Slate\nAliases: Slate"}, {"color": "#97c2fc", "font": {"color": "white"}, "id": "jumblelore", "label": "Jumblelore", "shape": "dot", "size": 20, "title": "Jumblelore\nAliases: Jumblelore"}, {"color": "#97c2fc", "font": {"color": "white"}, "id": "lucas", "label": "Lucas", "shape": "dot", "size": 20, "title": "Lucas\nAliases: Lucas"}, {"color": "#97c2fc", "font": {"color": "white"}, "id": "harold", "label": "Harold", "shape": "dot", "size": 20, "title": "Harold\nAliases: Harold"}]);
+                  edges = new vis.DataSet([{"arrows": "to", "from": "larry", "group": "social", "id": "larry__don__friend", "label": "friend", "minPosition": 0, "positions": [0, 2], "title": "Evidence:\n- [chunk 0] They had been best friends since their first year at Pogtarts.\n- [chunk 2] Larry and Don became friends again\n", "to": "don"}, {"arrows": "to", "from": "larry", "group": "social", "id": "larry__don__enemy", "label": "enemy", "minPosition": 1, "positions": [1], "title": "Evidence:\n- [chunk 1] Larry and Don had a fight and became enemies.\n", "to": "don"}, {"arrows": "to", "from": "penelope", "group": "social", "id": "penelope__larry__friend", "label": "friend", "minPosition": 0, "positions": [0, 1, 2], "title": "Evidence:\n- [chunk 0] Penelope, their new classmate\n- [chunk 1] Penelope became friend of Larry and Don.\nSentiments:\naffection\n- [chunk 2] Penelope felt relieved that her friends reconciled.\n", "to": "larry"}, {"arrows": "to", "from": "penelope", "group": "social", "id": "penelope__don__friend", "label": "friend", "minPosition": 0, "positions": [0, 1, 2], "title": "Evidence:\n- [chunk 0] Penelope, their new classmate\n- [chunk 1] Penelope became friend of Larry and Don.\nSentiments:\naffection\n- [chunk 2] Penelope felt relieved that her friends reconciled.\n", "to": "don"}, {"arrows": "to", "from": "slate", "group": "professional_education", "id": "slate__larry__teacher", "label": "teacher", "minPosition": 0, "positions": [0], "title": "Evidence:\n- [chunk 0] Slate was one of their professors\n", "to": "larry"}, {"arrows": "to", "from": "slate", "group": "professional_education", "id": "slate__don__teacher", "label": "teacher", "minPosition": 0, "positions": [0], "title": "Evidence:\n- [chunk 0] Slate was one of their professors\n", "to": "don"}, {"arrows": "to", "from": "slate", "group": "social", "id": "slate__lucas__friend", "label": "friend", "minPosition": 1, "positions": [1], "title": "Evidence:\n- [chunk 1] Slate appointed his friend Lucas for his former teaching position.\n", "to": "lucas"}, {"arrows": "to", "from": "jumblelore", "group": "professional_authority", "id": "jumblelore__slate__leader", "label": "leader", "minPosition": 0, "positions": [0], "title": "Evidence:\n- [chunk 0] Jumblelore was the current director of the school\n", "to": "slate"}, {"arrows": "to", "from": "jumblelore", "group": "professional_employment", "id": "jumblelore__harold__employer", "label": "employer", "minPosition": 2, "positions": [2], "title": "Evidence:\n- [chunk 2] Jumblelore appointed Harold\n", "to": "harold"}, {"arrows": "to", "from": "lucas", "group": "professional_education", "id": "lucas__larry__teacher", "label": "teacher", "minPosition": 1, "positions": [1], "title": "Evidence:\n- [chunk 1] Lucas was not a good teacher\n", "to": "larry"}, {"arrows": "to", "from": "lucas", "group": "professional_education", "id": "lucas__don__teacher", "label": "teacher", "minPosition": 1, "positions": [1], "title": "Evidence:\n- [chunk 1] Lucas was not a good teacher\n", "to": "don"}, {"arrows": "to", "from": "lucas", "group": "professional_education", "id": "lucas__penelope__teacher", "label": "teacher", "minPosition": 1, "positions": [1], "title": "Evidence:\n- [chunk 1] Lucas was not a good teacher\n", "to": "penelope"}, {"arrows": "to", "from": "harold", "group": "professional_education", "id": "harold__don__teacher", "label": "teacher", "minPosition": 2, "positions": [2], "title": "Evidence:\n- [chunk 2] Jumblelore appointed Harold as teacher of Don, Larry and Penelope.\n", "to": "don"}, {"arrows": "to", "from": "harold", "group": "professional_education", "id": "harold__larry__teacher", "label": "teacher", "minPosition": 2, "positions": [2], "title": "Evidence:\n- [chunk 2] Jumblelore appointed Harold as teacher of Don, Larry and Penelope.\n", "to": "larry"}, {"arrows": "to", "from": "harold", "group": "professional_education", "id": "harold__penelope__teacher", "label": "teacher", "minPosition": 2, "positions": [2], "title": "Evidence:\n- [chunk 2] Jumblelore appointed Harold as teacher of Don, Larry and Penelope.\n", "to": "penelope"}]);
 
                   nodeColors = {};
                   allNodes = nodes.get({ returnType: "Object" });
@@ -122,6 +128,51 @@
 
               }
               drawGraph();
+
+              (function() {
+                var slider = document.getElementById('timeSlider');
+                var timeValue = document.getElementById('timeValue');
+                if (!slider || !timeValue) return;
+                function updateVisibility(t) {
+                  var tVal = parseInt(t, 10);
+                  var edgeList = edges.get();
+                  var pairGroups = {};
+                  edgeList.forEach(function(e) {
+                    var pair = e.from + "\u0000" + e.to;
+                    if (!pairGroups[pair]) pairGroups[pair] = {};
+                    var g = e.group != null ? e.group : e.id;
+                    if (!pairGroups[pair][g]) pairGroups[pair][g] = [];
+                    pairGroups[pair][g].push(e);
+                  });
+                  var showEdgeIds = {};
+                  var visibleEdgeIds = {};
+                  var edgeUpdates = [];
+                  edgeList.forEach(function(e) {
+                    var show = false;
+                    var pos = (e.positions || []).map(function(p) { return parseInt(p, 10); });
+                    for (var i = 0; i < pos.length; i++) {
+                      if (pos[i] === tVal) {
+                        show = true;
+                        break;
+                      }
+                    }
+                    if (show) { visibleEdgeIds[e.from] = true; visibleEdgeIds[e.to] = true; }
+                    edgeUpdates.push({ id: e.id, hidden: !show });
+                  });
+                  edges.update(edgeUpdates);
+                  var nodeList = nodes.get();
+                  var nodeUpdates = nodeList.map(function(n) {
+                    return { id: n.id, hidden: !visibleEdgeIds[n.id] };
+                  });
+                  nodes.update(nodeUpdates);
+                }
+                slider.addEventListener('input', function() {
+                  timeValue.textContent = slider.value;
+                  updateVisibility(slider.value);
+                });
+                updateVisibility(slider.value);
+              })();
+    
         </script>
     </body>
 </html>

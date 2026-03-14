@@ -9,9 +9,9 @@ def aggregate(results):
 
     for result in results:
         for c in result.characters:
-            registry.add(c.name)
+            registry.add(c.name, c.aliases)
 
-    relationships = aggregate_relationships(results)
-    sentiments = aggregate_sentiments(results)
+    relationships = aggregate_relationships(results, registry)
+    sentiments = aggregate_sentiments(results, registry)
 
     return registry, relationships, sentiments

@@ -1,7 +1,7 @@
-from story_graph.aggregation.normalization import normalize_name
+from story_graph.aggregation.character_registry import CharacterRegistry
 
 
-def aggregate_relationships(results):
+def aggregate_relationships(results, registry: CharacterRegistry):
 
     edges = {}
 
@@ -9,8 +9,8 @@ def aggregate_relationships(results):
 
         for r in result.relationships:
 
-            source = normalize_name(r.source)
-            target = normalize_name(r.target)
+            source = registry.resolve(r.source)
+            target = registry.resolve(r.target)
 
             key = (source, target, r.relation)
 
@@ -19,8 +19,8 @@ def aggregate_relationships(results):
                     "source": source,
                     "target": target,
                     "relation": r.relation,
-                    "evidence": set()
+                    "evidence": []
                 }
-            edges[key]["evidence"].add(r.evidence)
+            edges[key]["evidence"].append((r.evidence, r.position))
 
     return list(edges.values())

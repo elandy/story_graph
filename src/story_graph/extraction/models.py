@@ -120,9 +120,10 @@ class Relationship(BaseModel):
     evidence: str = Field(description="Exact text that implies the relationship")
     chapter: Optional[int] = None
     scene: Optional[int] = None
+    position: Optional[int] = None
 
     def __str__(self):
-        return f"{self.source} -> {self.target}: Relation: {self.relation.value}. Evidence: {self.evidence}"
+        return f"{self.source} -> {self.target}: Relation: {self.relation.value}. Evidence: {self.evidence}. Position: {self.position}"
 
 
 class Sentiment(BaseModel):
@@ -132,9 +133,10 @@ class Sentiment(BaseModel):
     evidence: str = Field(description="Exact text that implies the sentiment")
     chapter: Optional[int] = None
     scene: Optional[int] = None
+    position: Optional[int] = None
 
     def __str__(self):
-        return f"{self.source} -> {self.target}: Sentiment: {self.sentiment.value}. Evidence: {self.evidence}"
+        return f"{self.source} -> {self.target}: Sentiment: {self.sentiment.value}. Evidence: {self.evidence}. Position: {self.position}"
 
 
 class ExtractionResult(BaseModel):
