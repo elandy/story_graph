@@ -2,7 +2,7 @@ from pathlib import Path
 
 from pyvis.network import Network
 
-from story_graph.graph.relationship_groups import get_relation_group
+from story_graph.graph.relationship_groups import get_relation_color, get_relation_group
 
 
 def _edge_positions(data):
@@ -107,8 +107,11 @@ def visualize_graph(G, output_file="story_graph.html", total_chunks=None):
 
         edge_id = f"{u}__{v}__{key}"
 
-        # build tooltip
-        tooltip = f""
+        # Get color for the relation
+        edge_color = get_relation_color(relation.lower())
+
+        # build tooltip text (plain text, since HTML tags are rendered literally)
+        tooltip = f"Relation: {relation}\n"
 
         if relation_evidence:
             tooltip += "Evidence:\n"
@@ -123,14 +126,14 @@ def visualize_graph(G, output_file="story_graph.html", total_chunks=None):
         if sentiments:
             tooltip += "Sentiments:\n"
             for s in sentiments:
-                tooltip += f"{s['type']}\n"
+                tooltip += f"- {s['type']}\n"
                 for ev in s["evidence"]:
                     pos = ev.get("position") if isinstance(ev, dict) else None
                     line = ev.get("text", ev) if isinstance(ev, dict) else ev
                     if pos is not None:
-                        tooltip += f"- [chunk {pos}] {line}\n"
+                        tooltip += f"  - [chunk {pos}] {line}\n"
                     else:
-                        tooltip += f"- {line}\n"
+                        tooltip += f"  - {line}\n"
 
         net.add_edge(
             u,
@@ -138,6 +141,7 @@ def visualize_graph(G, output_file="story_graph.html", total_chunks=None):
             id=edge_id,
             label=relation,
             title=tooltip,
+            color=edge_color,
             minPosition=min_position,
             positions=positions,
             group=group,

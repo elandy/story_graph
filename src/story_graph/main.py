@@ -15,20 +15,26 @@ import asyncio
 
 async def main():
     text = load_book("data/books/quantico.txt")
+    APPLY_NLP_FILTER = False
+    MAX_CHUNKS = 5
+    DEBUG_PRINTS = False
+    DEBUG_JSON = False
+
     paragraphs = split_paragraphs(text)
     print("Paragraphs:", len(paragraphs))
     chunks = chunk_paragraphs(paragraphs)
-    filtered_chunks = [c for c in chunks if has_character_interaction(c['text'])]
-    print("Filtered chunks without interaction:", len(chunks) - len(filtered_chunks))
-    total_chunks = len(filtered_chunks)
+    total_chunks = len(chunks)
+    print(f"Total chunks: {total_chunks}")
+    if APPLY_NLP_FILTER:
+        chunks = [c for c in chunks if has_character_interaction(c['text'])]
+        print("Filtered chunks without interaction:", total_chunks - len(chunks))
     sleeps = (total_chunks - 1) // 5
     # Rough estimate: 60s per sleep + 10s per request
     estimated_time_seconds = sleeps * 60 + total_chunks * 10
     estimated_time_minutes = estimated_time_seconds / 60
-    print(f"Total chunks: {total_chunks}, estimated time: {estimated_time_minutes:.1f} minutes.")
+    print(f"E.T.A.: {estimated_time_minutes:.1f} minutes.")
 
-    MAX_CHUNKS = 20
-    results = await process_chunks(filtered_chunks[0:MAX_CHUNKS])
+    results = await process_chunks(chunks[0:MAX_CHUNKS])
     total_characters = sum(len(r.characters) for r in results)
     total_relationships = sum(len(r.relationships) for r in results)
     total_sentiments = sum(len(r.sentiments) for r in results)
@@ -38,38 +44,25 @@ async def main():
     print("Relationships:", total_relationships)
     print("Sentiments:", total_sentiments)
 
-    for i, result in enumerate(results):
-        print(f"\nChunk {i} relationships:")
-        for r in result.relationships:
-            print(f"  {r}")
+    if DEBUG_PRINTS:
+        for i, result in enumerate(results):
+            print(f"\nChunk {i} relationships:")
+            for r in result.relationships:
+                print(f"  {r}")
 
     registry, relationships, sentiments = aggregate(results)
 
-    # Write aggregate output to disk for inspection (avoids relying on stdout)
-    import json
-    with open('debug_relationships.json', 'w', encoding='utf-8') as f:
-        json.dump(relationships, f, ensure_ascii=False, indent=2)
+    if DEBUG_JSON:
+        # Write aggregate output to disk for inspection (avoids relying on stdout)
+        import json
+        with open('debug_relationships.json', 'w', encoding='utf-8') as f:
+            json.dump(relationships, f, ensure_ascii=False, indent=2)
 
     G = build_graph(registry, relationships, sentiments)
     visualize_graph(G, total_chunks=MAX_CHUNKS)
-    print_graph(G)
-    # print("\n--- Aggregated ---")
-    #
-    # print("Unique characters:", len(registry.characters))
-    # print("Characters:", registry.characters)
-    # print("Relationships:", len(relationships))
-    # for r in relationships:
-    #     print(f"{r['source']} -> {r['target']} : {r['relation']}")
-    #
-    #     for ev in r["evidence"]:
-    #         print("  -", ev)
-    #
-    # print("Sentiments:", len(sentiments))
-    # for s in sentiments:
-    #     print(f"{s['source']} -> {s['target']} : {s['sentiment']}")
-    #
-    #     for ev in s["evidence"]:
-    #         print("  -", ev)
+    if DEBUG_PRINTS:
+        print_graph(G)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
