@@ -22,6 +22,8 @@ def build_graph(registry, relationships, sentiments):
             relation_key,
             relation=relation_key,
             relation_evidence=relation_evidence,
+            position=r.get("position"),
+            end_position=r.get("end_position"),
         )
 
     # attach sentiments to every edge between (source, target)
@@ -34,6 +36,8 @@ def build_graph(registry, relationships, sentiments):
                 {"text": text, "position": pos}
                 for text, pos in s["evidence"]
             ],
+            "position": s.get("position"),
+            "end_position": s.get("end_position"),
         }
         for _key, edge in G[s["source"]][s["target"]].items():
             if "sentiments" not in edge:

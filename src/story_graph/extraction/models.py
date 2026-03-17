@@ -121,9 +121,10 @@ class Relationship(BaseModel):
     chapter: Optional[int] = None
     scene: Optional[int] = None
     position: Optional[int] = None
+    end_position: Optional[int] = None
 
     def __str__(self):
-        return f"{self.source} -> {self.target}: Relation: {self.relation.value}. Evidence: {self.evidence}. Position: {self.position}"
+        return f"{self.source} -> {self.target}: Relation: {self.relation.value}. Evidence: {self.evidence}. Position: {self.position}. End: {self.end_position}"
 
 
 class Sentiment(BaseModel):
@@ -134,9 +135,10 @@ class Sentiment(BaseModel):
     chapter: Optional[int] = None
     scene: Optional[int] = None
     position: Optional[int] = None
+    end_position: Optional[int] = None
 
     def __str__(self):
-        return f"{self.source} -> {self.target}: Sentiment: {self.sentiment.value}. Evidence: {self.evidence}. Position: {self.position}"
+        return f"{self.source} -> {self.target}: Sentiment: {self.sentiment.value}. Evidence: {self.evidence}. Position: {self.position}. End: {self.end_position}"
 
 
 class ExtractionResult(BaseModel):

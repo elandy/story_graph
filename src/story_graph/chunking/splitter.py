@@ -11,7 +11,7 @@ def split_paragraphs(text: str) -> list[str]:
 
 def chunk_paragraphs(
     paragraphs: list[str],
-    window_size: int = 5,
+    window_size: int = 20,
     overlap: int = 0
 ) -> list[dict]:
 

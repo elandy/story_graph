@@ -141,6 +141,8 @@ def visualize_graph(G, output_file="story_graph.html", total_chunks=None):
             minPosition=min_position,
             positions=positions,
             group=group,
+            position=data.get("position"),
+            end_position=data.get("end_position"),
         )
 
     net.write_html(str(output_path))
@@ -184,12 +186,10 @@ def _inject_time_slider(html_path: Path, max_position: int) -> None:
                   var edgeUpdates = [];
                   edgeList.forEach(function(e) {
                     var show = false;
-                    var pos = (e.positions || []).map(function(p) { return parseInt(p, 10); });
-                    for (var i = 0; i < pos.length; i++) {
-                      if (pos[i] === tVal) {
-                        show = true;
-                        break;
-                      }
+                    var start = e.position;
+                    var end = e.end_position;
+                    if (start != null && tVal >= start && (end == null || tVal < end)) {
+                      show = true;
                     }
                     if (show) { visibleEdgeIds[e.from] = true; visibleEdgeIds[e.to] = true; }
                     edgeUpdates.push({ id: e.id, hidden: !show });

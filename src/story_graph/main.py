@@ -14,7 +14,7 @@ from story_graph.graph.visualize import visualize_graph
 import asyncio
 
 async def main():
-    text = load_book("data/books/hp.txt")
+    text = load_book("data/books/quantico.txt")
 
     paragraphs = split_paragraphs(text)
 
@@ -24,8 +24,8 @@ async def main():
     print("Paragraphs:", len(paragraphs))
     print("Chunks:", len(chunks))
     print("Filtered chunks:", len(filtered_chunks))
-
-    results = await process_chunks(filtered_chunks[0:5])
+    MAX_CHUNKS = 5
+    results = await process_chunks(filtered_chunks[0:MAX_CHUNKS])
     total_characters = sum(len(r.characters) for r in results)
     total_relationships = sum(len(r.relationships) for r in results)
     total_sentiments = sum(len(r.sentiments) for r in results)
@@ -48,7 +48,7 @@ async def main():
         json.dump(relationships, f, ensure_ascii=False, indent=2)
 
     G = build_graph(registry, relationships, sentiments)
-    visualize_graph(G, total_chunks=len(filtered_chunks))
+    visualize_graph(G, total_chunks=MAX_CHUNKS)
     print_graph(G)
     # print("\n--- Aggregated ---")
     #

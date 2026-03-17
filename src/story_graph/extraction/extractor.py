@@ -8,14 +8,16 @@ relationship_agent = Agent(
     system_prompt=(
         "Extract characters, relationships, and sentiments from the text."
         "Rules:"
-        "- Include relationships explicitly stated or clearly implied, including roles and hierarchy."
-        "- For roles: If a character is described as a professor/teacher, create 'teacher' relationships to student characters mentioned in the text."
-        "- For appointments: If a character is appointed to a teaching position, create 'teacher' relationships to student characters in the text, and consider the previous holder no longer in that role if 'former' is used."
-        "- For employers/leaders: If a character holds a position of authority (e.g., director), infer 'employer' or 'leader' to subordinates if stated."
-        "- Do NOT infer speculative relationships beyond what's clearly implied."
+        "- Include relationships that are explicitly stated OR clearly implied by the text."
+        "- Use common-sense inference: e.g., 'classmate', 'new classmate', 'coworker', 'teammate', "
+        "  'boss', 'student', 'neighbor', 'enemy', 'friend' all imply a relationship even if not "
+        "  written as 'X is Y'."
+        "- If the text establishes a social/role connection, create a relationship edge. "
+        "- For role changes: When someone is appointed or replaces another in a role (e.g., teacher), create relationship edges based on that role to relevant characters in the text (e.g., teacher to students)."
+        "- For relationship endings: If the text implies a relationship ends (e.g., 'graduated', 'fired', 'retired', 'died', 'quit', 'left'), "
+        "  set end_position to the current position for the relevant relationship."
+        "- Do NOT invent relationships or endings that are not supported by any text."
         "- Evidence must be an exact quote from the text."
-        "- If the text implies a social or role relationship (classmate, colleague, neighbor, mentor, etc.), treat it as a relationship and classify to the best matching type."
-        "- You may infer a relationship when it is clearly implied by the text, not only when spelled out as X is Y."
     ),
 )
 
