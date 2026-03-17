@@ -15,16 +15,19 @@ import asyncio
 
 async def main():
     text = load_book("data/books/quantico.txt")
-
     paragraphs = split_paragraphs(text)
-
+    print("Paragraphs:", len(paragraphs))
     chunks = chunk_paragraphs(paragraphs)
     filtered_chunks = [c for c in chunks if has_character_interaction(c['text'])]
+    print("Filtered chunks without interaction:", len(chunks) - len(filtered_chunks))
+    total_chunks = len(filtered_chunks)
+    sleeps = (total_chunks - 1) // 5
+    # Rough estimate: 60s per sleep + 10s per request
+    estimated_time_seconds = sleeps * 60 + total_chunks * 10
+    estimated_time_minutes = estimated_time_seconds / 60
+    print(f"Total chunks: {total_chunks}, estimated time: {estimated_time_minutes:.1f} minutes.")
 
-    print("Paragraphs:", len(paragraphs))
-    print("Chunks:", len(chunks))
-    print("Filtered chunks:", len(filtered_chunks))
-    MAX_CHUNKS = 5
+    MAX_CHUNKS = 20
     results = await process_chunks(filtered_chunks[0:MAX_CHUNKS])
     total_characters = sum(len(r.characters) for r in results)
     total_relationships = sum(len(r.relationships) for r in results)
