@@ -10,31 +10,65 @@ from story_graph.graph.builder import build_graph
 from story_graph.graph.debug import print_graph
 from story_graph.graph.visualize import visualize_graph
 
-
 import asyncio
+import argparse
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Story graph pipeline")
+
+    parser.add_argument("book", type=str, help="Path to the book file")
+
+    parser.add_argument("--apply-nlp-filter", action="store_true",
+                        help="Filter chunks using NLP character interaction")
+    parser.add_argument("--max-chunks", type=int, default=5,
+                        help="Maximum number of chunks to process")
+    parser.add_argument("--debug-prints", action="store_true",
+                        help="Enable verbose debug prints")
+    parser.add_argument("--debug-json", action="store_true",
+                        help="Dump relationships JSON to disk")
+
+    return parser.parse_args()
+
 
 async def main():
-    text = load_book("data/books/quantico.txt")
-    APPLY_NLP_FILTER = False
-    MAX_CHUNKS = 5
-    DEBUG_PRINTS = False
-    DEBUG_JSON = False
+    args = parse_args()
+
+    text = load_book(args.book)
+
+    APPLY_NLP_FILTER = args.apply_nlp_filter
+    MAX_CHUNKS = args.max_chunks
+    DEBUG_PRINTS = args.debug_prints
+    DEBUG_JSON = args.debug_json
 
     paragraphs = split_paragraphs(text)
     print("Paragraphs:", len(paragraphs))
+
+    # --- Chunking ---
     chunks = chunk_paragraphs(paragraphs)
-    total_chunks = len(chunks)
-    print(f"Total chunks: {total_chunks}")
+    total_chunks_raw = len(chunks)
+
+    # --- Optional filtering ---
     if APPLY_NLP_FILTER:
-        chunks = [c for c in chunks if has_character_interaction(c['text'])]
-        print("Filtered chunks without interaction:", total_chunks - len(chunks))
-    sleeps = (total_chunks - 1) // 5
-    # Rough estimate: 60s per sleep + 10s per request
-    estimated_time_seconds = sleeps * 60 + total_chunks * 10
+        filtered_chunks = [c for c in chunks if has_character_interaction(c['text'])]
+        print("Filtered chunks without interaction:", total_chunks_raw - len(filtered_chunks))
+        chunks = filtered_chunks
+
+    total_chunks_available = len(chunks)
+    effective_chunks = min(MAX_CHUNKS, total_chunks_available)
+
+    print(f"Total chunks available: {total_chunks_available}")
+    print(f"Chunks to process: {effective_chunks}")
+
+    # --- ETA based on actual processed chunks ---
+    sleeps = (effective_chunks - 1) // 5 if effective_chunks > 0 else 0
+    estimated_time_seconds = sleeps * 60 + effective_chunks * 10
     estimated_time_minutes = estimated_time_seconds / 60
     print(f"E.T.A.: {estimated_time_minutes:.1f} minutes.")
 
-    results = await process_chunks(chunks[0:MAX_CHUNKS])
+    # --- Processing ---
+    results = await process_chunks(chunks[:effective_chunks])
+
     total_characters = sum(len(r.characters) for r in results)
     total_relationships = sum(len(r.relationships) for r in results)
     total_sentiments = sum(len(r.sentiments) for r in results)
@@ -53,13 +87,13 @@ async def main():
     registry, relationships, sentiments = aggregate(results)
 
     if DEBUG_JSON:
-        # Write aggregate output to disk for inspection (avoids relying on stdout)
         import json
         with open('debug_relationships.json', 'w', encoding='utf-8') as f:
             json.dump(relationships, f, ensure_ascii=False, indent=2)
 
     G = build_graph(registry, relationships, sentiments)
-    visualize_graph(G, total_chunks=MAX_CHUNKS)
+    visualize_graph(G, total_chunks=effective_chunks)
+
     if DEBUG_PRINTS:
         print_graph(G)
 
