@@ -21,7 +21,7 @@ def parse_args():
 
     parser.add_argument("--apply-nlp-filter", action="store_true",
                         help="Filter chunks using NLP character interaction")
-    parser.add_argument("--max-chunks", type=int, default=5,
+    parser.add_argument("--max-chunks", type=int, default=0,
                         help="Maximum number of chunks to process")
     parser.add_argument("--debug-prints", action="store_true",
                         help="Enable verbose debug prints")
@@ -55,7 +55,7 @@ async def main():
         chunks = filtered_chunks
 
     total_chunks_available = len(chunks)
-    effective_chunks = min(MAX_CHUNKS, total_chunks_available)
+    effective_chunks = min(MAX_CHUNKS, total_chunks_available) if MAX_CHUNKS else total_chunks_available
 
     print(f"Total chunks available: {total_chunks_available}")
     print(f"Chunks to process: {effective_chunks}")
