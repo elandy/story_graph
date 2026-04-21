@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from story_graph.chunking.splitter import split_paragraphs, chunk_paragraphs
+from story_graph.extraction.checkpoint import default_checkpoint_path
 from story_graph.extraction.pipeline import process_chunks
 from story_graph.filtering.character_filter import has_character_interaction
 from story_graph.ingest.loader import load_book
@@ -12,6 +13,7 @@ from story_graph.graph.visualize import visualize_graph
 
 import asyncio
 import argparse
+from pathlib import Path
 
 
 def parse_args():
@@ -27,6 +29,10 @@ def parse_args():
                         help="Enable verbose debug prints")
     parser.add_argument("--debug-json", action="store_true",
                         help="Dump relationships JSON to disk")
+    parser.add_argument("--checkpoint-file", type=str, default="",
+                        help="Path to the extraction checkpoint JSON file")
+    parser.add_argument("--reset-checkpoint", action="store_true",
+                        help="Delete any saved extraction checkpoint before running")
 
     return parser.parse_args()
 
@@ -67,7 +73,18 @@ async def main():
     print(f"E.T.A.: {estimated_time_minutes:.1f} minutes.")
 
     # --- Processing ---
-    results = await process_chunks(chunks[:effective_chunks])
+    checkpoint_path = (
+        Path(args.checkpoint_file)
+        if args.checkpoint_file
+        else default_checkpoint_path(args.book, APPLY_NLP_FILTER)
+    )
+    print(f"Extraction checkpoint: {checkpoint_path}")
+
+    results = await process_chunks(
+        chunks[:effective_chunks],
+        checkpoint_path=checkpoint_path,
+        reset_checkpoint=args.reset_checkpoint,
+    )
 
     total_characters = sum(len(r.characters) for r in results)
     total_relationships = sum(len(r.relationships) for r in results)

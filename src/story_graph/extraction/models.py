@@ -118,6 +118,10 @@ class Relationship(BaseModel):
     target: str
     relation: RelationshipType
     evidence: str = Field(description="Exact text that implies the relationship")
+    ends_here: bool = Field(
+        default=False,
+        description="True when the quoted evidence marks the end of this relationship.",
+    )
     chapter: Optional[int] = None
     scene: Optional[int] = None
     position: Optional[int] = None
@@ -132,6 +136,10 @@ class Sentiment(BaseModel):
     target: str
     sentiment: SentimentType
     evidence: str = Field(description="Exact text that implies the sentiment")
+    ends_here: bool = Field(
+        default=False,
+        description="True when the quoted evidence marks the end of this sentiment.",
+    )
     chapter: Optional[int] = None
     scene: Optional[int] = None
     position: Optional[int] = None
