@@ -1,15 +1,18 @@
 import spacy
 
-nlp = spacy.load("en_core_web_sm")
+
+_nlp = None
 
 
-import spacy
-
-nlp = spacy.load("en_core_web_sm")
+def _get_nlp():
+    global _nlp
+    if _nlp is None:
+        _nlp = spacy.load("en_core_web_sm")
+    return _nlp
 
 
 def count_character_mentions(text: str) -> int:
-    doc = nlp(text)
+    doc = _get_nlp()(text)
 
     characters = set()
 

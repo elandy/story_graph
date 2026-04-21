@@ -1,6 +1,6 @@
 # Story Graph
 
-Extracts character relationships and sentiments from a book, aggregates them into a graph, and writes an interactive HTML visualization.
+Extracts character relationships and sentiments from a book, aggregates them into a graph, and writes an interactive HTML visualization. The project now supports both the original CLI flow and a web app backed by the same shared pipeline core.
 
 ## Requirements
 
@@ -51,6 +51,41 @@ Proceed with extraction for N remaining chunk(s)? (y/n):
 
 Type `y` to continue.
 
+## Run The Web App
+
+Start the server:
+
+```powershell
+.\.venv\Scripts\python.exe -m story_graph.web
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000
+```
+
+Current web scope:
+
+- upload UTF-8 `.txt` files only
+- process jobs in the background
+- poll progress and status in the browser
+- render the generated graph HTML directly in an embedded frame
+
+Each upload gets its own workspace under:
+
+```text
+data/jobs/<job-id>/
+```
+
+Artifacts written per job:
+
+- `input.txt`
+- `checkpoint.json`
+- `story_graph.html`
+- `debug_relationships.json`
+- `status.json`
+
 ## Outputs
 
 The main output HTML is written to:
@@ -65,6 +100,8 @@ If `--debug-json` is enabled, this file is also written:
 debug_relationships.json
 ```
 
+For the web app, equivalent outputs are written inside the per-job workspace in `data/jobs/<job-id>/`.
+
 ## Resume After Interruption Or Error
 
 The extraction stage is resumable. After each completed chunk, the pipeline saves a checkpoint file containing:
@@ -74,6 +111,8 @@ The extraction stage is resumable. After each completed chunk, the pipeline save
 - the extracted structured result
 
 If the process stops because of `Ctrl+C`, a terminal close, or an extraction error, rerun the command with the same book and checkpoint file. The pipeline reloads completed chunks and continues from the next unfinished chunk.
+
+The web app uses the same checkpointed extraction core. If the server restarts, queued or running jobs are placed back in the queue and resume from the job workspace checkpoint.
 
 ### Example: stop after 5 chunks, resume to 10
 

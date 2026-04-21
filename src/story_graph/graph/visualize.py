@@ -32,6 +32,7 @@ def _iter_edges(G):
 
 def visualize_graph(G, output_file="story_graph.html", total_chunks=None):
     output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     net = Network(
         height="800px",
