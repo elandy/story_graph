@@ -15,9 +15,13 @@ class JobNotFoundError(FileNotFoundError):
     pass
 
 
+class JobRetryError(ValueError):
+    pass
+
+
 class JobManager:
     def __init__(self, jobs_root: Path):
-        self.jobs_root = Path(jobs_root)
+        self.jobs_root = Path(jobs_root).resolve()
         self._queue: Queue[str | None] = Queue()
         self._stop_event = threading.Event()
         self._write_lock = threading.RLock()
@@ -79,6 +83,43 @@ class JobManager:
 
         self._input_path(job_id).write_text(text, encoding="utf-8")
         self._write_status(status)
+        self._queue.put(job_id)
+        return status
+
+    def list_statuses(self) -> list[JobStatus]:
+        self.jobs_root.mkdir(parents=True, exist_ok=True)
+        statuses = []
+
+        with self._write_lock:
+            for status_path in self.jobs_root.glob("*/status.json"):
+                try:
+                    statuses.append(
+                        JobStatus.model_validate_json(
+                            status_path.read_text(encoding="utf-8")
+                        )
+                    )
+                except Exception:
+                    continue
+
+        return sorted(statuses, key=lambda status: status.updated_at, reverse=True)
+
+    def retry_job(self, job_id: str) -> JobStatus:
+        with self._write_lock:
+            status = self.get_status(job_id)
+            if status.state != JobState.failed:
+                raise JobRetryError("Only failed jobs can be resumed.")
+
+            if not self._input_path(job_id).exists():
+                raise JobRetryError("Job input file is missing.")
+
+            status.state = JobState.queued
+            status.stage = "queued"
+            status.message = "Job queued to resume from checkpoint."
+            status.error = None
+            status.traceback = None
+            status.updated_at = _utc_now()
+            self._write_status(status)
+
         self._queue.put(job_id)
         return status
 

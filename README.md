@@ -70,6 +70,8 @@ Current web scope:
 - upload UTF-8 `.txt` files only
 - process jobs in the background
 - poll progress and status in the browser
+- show past jobs from `data/jobs/`
+- resume failed jobs from their saved checkpoints
 - render the generated graph HTML directly in an embedded frame
 
 Each upload gets its own workspace under:
@@ -113,6 +115,8 @@ The extraction stage is resumable. After each completed chunk, the pipeline save
 If the process stops because of `Ctrl+C`, a terminal close, or an extraction error, rerun the command with the same book and checkpoint file. The pipeline reloads completed chunks and continues from the next unfinished chunk.
 
 The web app uses the same checkpointed extraction core. If the server restarts, queued or running jobs are placed back in the queue and resume from the job workspace checkpoint.
+
+Failed web jobs are not retried automatically. Open the web app, find the failed job in the Jobs list, and click `Resume`. The backend requeues the same job ID and continues from `data/jobs/<job-id>/checkpoint.json`.
 
 ### Example: stop after 5 chunks, resume to 10
 

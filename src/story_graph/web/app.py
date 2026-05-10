@@ -7,13 +7,17 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.routing import Route
 
-from story_graph.web.jobs import JobManager, JobNotFoundError
+from story_graph.web.jobs import JobManager, JobNotFoundError, JobRetryError
 from story_graph.web.models import JobState, JobStatus
 from story_graph.web.ui import render_index_page
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_JOBS_ROOT = PROJECT_ROOT / "data" / "jobs"
+
+
 def create_app(jobs_root: Path | None = None) -> Starlette:
-    manager = JobManager(jobs_root or (Path("data") / "jobs"))
+    manager = JobManager(jobs_root or DEFAULT_JOBS_ROOT)
 
     @asynccontextmanager
     async def lifespan(app: Starlette):
@@ -29,8 +33,10 @@ def create_app(jobs_root: Path | None = None) -> Starlette:
         lifespan=lifespan,
         routes=[
             Route("/", endpoint=index_page),
+            Route("/jobs", endpoint=list_jobs, methods=["GET"]),
             Route("/jobs", endpoint=create_job, methods=["POST"]),
             Route("/jobs/{job_id:str}", endpoint=get_job_status, methods=["GET"]),
+            Route("/jobs/{job_id:str}/retry", endpoint=retry_job, methods=["POST"]),
             Route("/jobs/{job_id:str}/graph", endpoint=get_job_graph, methods=["GET"]),
         ],
     )
@@ -38,6 +44,11 @@ def create_app(jobs_root: Path | None = None) -> Starlette:
 
 async def index_page(_request: Request) -> HTMLResponse:
     return HTMLResponse(render_index_page())
+
+
+async def list_jobs(request: Request) -> JSONResponse:
+    statuses = request.app.state.job_manager.list_statuses()
+    return JSONResponse({"jobs": [_serialize_status(status) for status in statuses]})
 
 
 async def create_job(request: Request) -> JSONResponse:
@@ -89,6 +100,18 @@ async def get_job_status(request: Request) -> JSONResponse:
         return JSONResponse({"error": "Job not found."}, status_code=404)
 
     return JSONResponse(_serialize_status(status))
+
+
+async def retry_job(request: Request) -> JSONResponse:
+    job_id = request.path_params["job_id"]
+    try:
+        status = request.app.state.job_manager.retry_job(job_id)
+    except JobNotFoundError:
+        return JSONResponse({"error": "Job not found."}, status_code=404)
+    except JobRetryError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+
+    return JSONResponse(_serialize_status(status), status_code=202)
 
 
 async def get_job_graph(request: Request):
