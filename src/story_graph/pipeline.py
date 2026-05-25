@@ -32,6 +32,7 @@ class StoryGraphRunConfig:
     output_html_path: Path = field(default_factory=lambda: Path("story_graph.html"))
     debug_json_path: Path | None = None
     confirm_extraction: Callable[[int], bool] | None = None
+    should_pause: Callable[[], bool] | None = None
     progress_callback: ProgressCallback | None = None
     rate_limit_every: int = 5
     rate_limit_seconds: float = 60.0
@@ -211,6 +212,7 @@ async def run_story_graph_pipeline(
         checkpoint_path=checkpoint_path,
         reset_checkpoint=config.reset_checkpoint,
         confirm_continue=config.confirm_extraction,
+        should_pause=config.should_pause,
         progress_callback=config.progress_callback,
         rate_limit_every=config.rate_limit_every,
         rate_limit_seconds=config.rate_limit_seconds,

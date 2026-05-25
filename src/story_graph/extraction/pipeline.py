@@ -9,6 +9,10 @@ from story_graph.extraction.models import ExtractionResult
 from story_graph.progress import PipelineProgressUpdate, ProgressCallback, emit_progress
 
 
+class ExtractionPaused(Exception):
+    pass
+
+
 class RequestPacer:
     def __init__(
         self,
@@ -129,6 +133,7 @@ async def process_chunks(
     checkpoint_path: Path | None = None,
     reset_checkpoint: bool = False,
     confirm_continue: Callable[[int], bool] | None = None,
+    should_pause: Callable[[], bool] | None = None,
     progress_callback: ProgressCallback | None = None,
     rate_limit_every: int = 5,
     rate_limit_seconds: float = 60.0,
@@ -227,6 +232,20 @@ async def process_chunks(
     chunk_index = len(results)
 
     while chunk_index < len(chunks):
+        if should_pause is not None and should_pause():
+            emit_progress(
+                progress_callback,
+                PipelineProgressUpdate(
+                    stage="extraction",
+                    message="Extraction paused.",
+                    total_chunks_to_process=len(chunks),
+                    completed_chunks=len(results),
+                    current_chunk=chunk_index + 1 if chunk_index < len(chunks) else None,
+                    checkpoint_path=checkpoint_file,
+                ),
+            )
+            raise ExtractionPaused("Extraction paused.")
+
         batch_chunks = chunks[chunk_index:min(chunk_index + batch_size, len(chunks))]
         batch_start = chunk_index + 1
         batch_end = batch_start + len(batch_chunks) - 1

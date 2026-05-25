@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 import threading
 import traceback
 import uuid
@@ -6,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from queue import Empty, Queue
 
+from story_graph.extraction.pipeline import ExtractionPaused
 from story_graph.pipeline import StoryGraphRunConfig, run_story_graph_pipeline_from_file
 from story_graph.progress import PipelineProgressUpdate
 from story_graph.web.models import JobState, JobStatus
@@ -16,6 +18,14 @@ class JobNotFoundError(FileNotFoundError):
 
 
 class JobRetryError(ValueError):
+    pass
+
+
+class JobPauseError(ValueError):
+    pass
+
+
+class JobDeleteError(ValueError):
     pass
 
 
@@ -118,8 +128,8 @@ class JobManager:
     def retry_job(self, job_id: str) -> JobStatus:
         with self._write_lock:
             status = self.get_status(job_id)
-            if status.state != JobState.failed:
-                raise JobRetryError("Only failed jobs can be resumed.")
+            if status.state not in {JobState.failed, JobState.paused}:
+                raise JobRetryError("Only failed or paused jobs can be resumed.")
 
             if not self._input_path(job_id).exists():
                 raise JobRetryError("Job input file is missing.")
@@ -127,6 +137,7 @@ class JobManager:
             status.state = JobState.queued
             status.stage = "queued"
             status.message = "Job queued to resume from checkpoint."
+            status.pause_requested = False
             status.error = None
             status.traceback = None
             status.updated_at = _utc_now()
@@ -134,6 +145,39 @@ class JobManager:
 
         self._queue.put(job_id)
         return status
+
+    def pause_job(self, job_id: str) -> JobStatus:
+        with self._write_lock:
+            status = self.get_status(job_id)
+            if status.state == JobState.queued:
+                status.state = JobState.paused
+                status.stage = "paused"
+                status.message = "Job paused."
+                status.pause_requested = False
+            elif status.state == JobState.running:
+                status.pause_requested = True
+                status.stage = "pausing"
+                status.message = "Pause requested. Waiting for the current batch to finish."
+            elif status.state == JobState.paused:
+                raise JobPauseError("Job is already paused.")
+            else:
+                raise JobPauseError("Only queued or running jobs can be paused.")
+
+            status.updated_at = _utc_now()
+            self._write_status(status)
+            return status
+
+    def delete_job(self, job_id: str) -> None:
+        workspace = self._workspace(job_id)
+        with self._write_lock:
+            status = self.get_status(job_id)
+            if status.state not in {JobState.completed, JobState.failed, JobState.paused}:
+                raise JobDeleteError("Only completed, failed, or paused jobs can be deleted.")
+
+            if not workspace.exists():
+                raise JobNotFoundError(job_id)
+
+            shutil.rmtree(workspace)
 
     def get_status(self, job_id: str) -> JobStatus:
         status_path = self._status_path(job_id)
@@ -176,7 +220,7 @@ class JobManager:
         except JobNotFoundError:
             return
 
-        if status.state == JobState.completed:
+        if status.state in {JobState.completed, JobState.failed, JobState.paused}:
             return
 
         self._update_status(
@@ -184,6 +228,7 @@ class JobManager:
             state=JobState.running,
             stage="running",
             message="Worker started processing.",
+            pause_requested=False,
             error=None,
             traceback=None,
         )
@@ -194,6 +239,11 @@ class JobManager:
         debug_json_path = self._workspace(job_id) / status.artifacts.debug_relationships_file
 
         def progress_callback(update: PipelineProgressUpdate) -> None:
+            try:
+                current_status = self.get_status(job_id)
+            except JobNotFoundError:
+                return
+
             fields = {
                 "stage": update.stage,
                 "message": update.message,
@@ -210,6 +260,10 @@ class JobManager:
                 value = getattr(update, field_name)
                 if value is not None:
                     fields[field_name] = value
+
+            if current_status.pause_requested:
+                fields["stage"] = "pausing"
+                fields["message"] = "Pause requested. Waiting for the current batch to finish."
 
             self._update_status(job_id, **fields)
 
@@ -229,16 +283,30 @@ class JobManager:
                         output_html_path=graph_path,
                         debug_json_path=debug_json_path,
                         confirm_extraction=lambda _remaining: True,
+                        should_pause=lambda: self._should_pause(job_id),
                         progress_callback=progress_callback,
                     ),
                 )
             )
+        except ExtractionPaused:
+            self._update_status(
+                job_id,
+                state=JobState.paused,
+                stage="paused",
+                message="Job paused.",
+                current_chunk=None,
+                pause_requested=False,
+                error=None,
+                traceback=None,
+            )
+            return
         except Exception as exc:
             self._update_status(
                 job_id,
                 state=JobState.failed,
                 stage="failed",
                 message=f"Job failed: {exc}",
+                pause_requested=False,
                 error=str(exc),
                 traceback=traceback.format_exc(),
             )
@@ -260,6 +328,7 @@ class JobManager:
             total_characters=result.total_characters,
             total_relationships=result.total_relationships,
             total_sentiments=result.total_sentiments,
+            pause_requested=False,
             error=None,
             traceback=None,
         )
@@ -277,6 +346,7 @@ class JobManager:
             status.state = JobState.queued
             status.stage = "queued"
             status.message = "Job queued."
+            status.pause_requested = False
             status.error = None
             status.traceback = None
             status.updated_at = _utc_now()
@@ -311,6 +381,12 @@ class JobManager:
 
     def _input_path(self, job_id: str) -> Path:
         return self._workspace(job_id) / "input.txt"
+
+    def _should_pause(self, job_id: str) -> bool:
+        try:
+            return self.get_status(job_id).pause_requested
+        except JobNotFoundError:
+            return False
 
 
 def _utc_now() -> datetime:

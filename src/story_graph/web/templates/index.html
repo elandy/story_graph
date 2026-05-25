@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Story Graph Studio</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <span class="eyebrow">Story Graph Studio</span>
+      <h1>Upload a plain-text story. Get the graph back in the browser.</h1>
+      <p>
+        Each upload becomes an isolated job workspace with its own source file, checkpoint,
+        graph HTML, debug JSON, and status metadata. The UI polls chunk-by-chunk progress while
+        the backend keeps request handling free.
+      </p>
+    </section>
+
+    <section class="panel">
+      <form id="upload-form">
+        <label class="dropzone" for="file-input">
+          <strong id="selected-file">Choose a UTF-8 .txt file</strong>
+          <span>The first pass reuses the existing generated HTML graph directly.</span>
+          <input id="file-input" name="file" type="file" accept=".txt,text/plain" required>
+        </label>
+
+        <div class="options">
+          <label class="field">
+            <span>Max chunks</span>
+            <input name="max_chunks" type="number" min="0" step="1" placeholder="0 means full text">
+          </label>
+
+          <label class="field">
+            <span>Max chunk tokens</span>
+            <input name="max_chunk_tokens" type="number" min="0" step="1" value="3000">
+          </label>
+
+          <label class="field">
+            <span>Max paragraphs per chunk</span>
+            <input name="max_paragraphs_per_chunk" type="number" min="0" step="1" value="80">
+          </label>
+
+          <label class="field">
+            <span>Batch size</span>
+            <input name="batch_size" type="number" min="1" step="1" value="4">
+          </label>
+
+          <label class="field checkbox">
+            <input name="apply_nlp_filter" type="checkbox" value="true">
+            <span>Apply the optional NLP pre-filter before extraction.</span>
+          </label>
+        </div>
+
+        <button id="submit-button" type="submit">Start Processing</button>
+      </form>
+
+      <section class="history">
+        <div class="history-head">
+          <h2>Jobs</h2>
+          <button class="button-secondary button-small" id="refresh-jobs-button" type="button">Refresh</button>
+        </div>
+        <div class="job-list" id="job-list"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

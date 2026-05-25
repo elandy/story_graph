@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class JobState(str, Enum):
     queued = "queued"
     running = "running"
+    paused = "paused"
     completed = "completed"
     failed = "failed"
 
@@ -44,6 +45,7 @@ class JobStatus(BaseModel):
     total_characters: int = 0
     total_relationships: int = 0
     total_sentiments: int = 0
+    pause_requested: bool = False
     error: str | None = None
     traceback: str | None = None
     artifacts: JobArtifacts = Field(default_factory=JobArtifacts)

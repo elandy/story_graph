@@ -4,12 +4,13 @@ from pathlib import Path
 from starlette.applications import Starlette
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
-from starlette.responses import FileResponse, HTMLResponse, JSONResponse
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
+from starlette.staticfiles import StaticFiles
 
-from story_graph.web.jobs import JobManager, JobNotFoundError, JobRetryError
+from story_graph.web.jobs import JobDeleteError, JobManager, JobNotFoundError, JobPauseError, JobRetryError
 from story_graph.web.models import JobState, JobStatus
-from story_graph.web.ui import render_index_page
+from story_graph.web.ui import STATIC_DIR, render_index_page
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -28,7 +29,7 @@ def create_app(jobs_root: Path | None = None) -> Starlette:
         finally:
             manager.stop()
 
-    return Starlette(
+    app = Starlette(
         debug=False,
         lifespan=lifespan,
         routes=[
@@ -36,11 +37,14 @@ def create_app(jobs_root: Path | None = None) -> Starlette:
             Route("/jobs", endpoint=list_jobs, methods=["GET"]),
             Route("/jobs", endpoint=create_job, methods=["POST"]),
             Route("/jobs/{job_id:str}", endpoint=get_job_status, methods=["GET"]),
+            Route("/jobs/{job_id:str}", endpoint=delete_job, methods=["DELETE"]),
+            Route("/jobs/{job_id:str}/pause", endpoint=pause_job, methods=["POST"]),
             Route("/jobs/{job_id:str}/retry", endpoint=retry_job, methods=["POST"]),
             Route("/jobs/{job_id:str}/graph", endpoint=get_job_graph, methods=["GET"]),
         ],
     )
-
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    return app
 
 async def index_page(_request: Request) -> HTMLResponse:
     return HTMLResponse(render_index_page())
@@ -130,6 +134,30 @@ async def retry_job(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=409)
 
     return JSONResponse(_serialize_status(status), status_code=202)
+
+
+async def pause_job(request: Request) -> JSONResponse:
+    job_id = request.path_params["job_id"]
+    try:
+        status = request.app.state.job_manager.pause_job(job_id)
+    except JobNotFoundError:
+        return JSONResponse({"error": "Job not found."}, status_code=404)
+    except JobPauseError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+
+    return JSONResponse(_serialize_status(status), status_code=202)
+
+
+async def delete_job(request: Request) -> Response:
+    job_id = request.path_params["job_id"]
+    try:
+        request.app.state.job_manager.delete_job(job_id)
+    except JobNotFoundError:
+        return JSONResponse({"error": "Job not found."}, status_code=404)
+    except JobDeleteError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+
+    return Response(status_code=204)
 
 
 async def get_job_graph(request: Request):
