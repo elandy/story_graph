@@ -2,6 +2,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 
@@ -18,10 +19,49 @@ from story_graph.chunking.splitter import chunk_paragraphs, estimate_text_tokens
 from story_graph.extraction.checkpoint import load_checkpoint, write_checkpoint
 from story_graph.extraction.models import ExtractionResult, Relationship, RelationshipType, Sentiment, SentimentType
 from story_graph.extraction.pipeline import annotate_temporal_positions, process_chunks
+from story_graph.filtering.character_filter import has_character_interaction
 from story_graph.graph.relationship_groups import get_relation_group
 
 
 class TemporalNormalizationTests(unittest.TestCase):
+    def test_character_filter_rejects_quote_only_chunks_without_interaction(self):
+        fake_doc = SimpleNamespace(ents=[], __iter__=lambda self: iter([]))
+
+        class EmptyDoc:
+            ents = []
+
+            def __iter__(self):
+                return iter([])
+
+        with patch("story_graph.filtering.character_filter._get_nlp", return_value=lambda text: EmptyDoc()):
+            self.assertFalse(has_character_interaction('"Hello?"'))
+
+    def test_character_filter_accepts_named_dialogue_with_speech(self):
+        class FakeToken:
+            def __init__(self, text: str, lemma: str, pos: str, lower: str | None = None):
+                self.text = text
+                self.lemma_ = lemma
+                self.pos_ = pos
+                self.lower_ = lower if lower is not None else text.lower()
+
+        class FakeEnt:
+            def __init__(self, text: str, label: str):
+                self.text = text
+                self.label_ = label
+
+        class FakeDoc:
+            ents = [FakeEnt("Harry", "PERSON"), FakeEnt("Ron", "PERSON")]
+
+            def __iter__(self):
+                return iter([
+                    FakeToken("Harry", "Harry", "PROPN"),
+                    FakeToken("asked", "ask", "VERB"),
+                    FakeToken("Ron", "Ron", "PROPN"),
+                ])
+
+        with patch("story_graph.filtering.character_filter._get_nlp", return_value=lambda text: FakeDoc()):
+            self.assertTrue(has_character_interaction('"Hi," Harry asked Ron.'))
+
     def test_relationship_type_supports_specific_family_roles(self):
         relationship = Relationship(
             source="Vernon Dursley",
@@ -198,8 +238,8 @@ class ProcessChunksResumeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_process_chunks_batches_multiple_chunks_into_one_request(self):
         chunks = [
-            {"text": "Alpha paragraph.", "start_index": 0},
-            {"text": "Beta paragraph.", "start_index": 1},
+            {"text": "Alpha paragraph.", "start_index": 0, "token_estimate": 50},
+            {"text": "Beta paragraph.", "start_index": 1, "token_estimate": 50},
         ]
         batch_calls = []
 
@@ -243,6 +283,62 @@ class ProcessChunksResumeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(batch_calls, [["Alpha paragraph.", "Beta paragraph."]])
         self.assertEqual(saved_results[0].relationships[0].position, 0)
         self.assertEqual(saved_results[1].relationships[0].position, 1)
+
+    async def test_process_chunks_reduces_batch_size_when_token_budget_is_tight(self):
+        chunks = [
+            {"text": "Alpha paragraph.", "start_index": 0, "token_estimate": 70},
+            {"text": "Beta paragraph.", "start_index": 1, "token_estimate": 70},
+            {"text": "Gamma paragraph.", "start_index": 2, "token_estimate": 20},
+        ]
+        batch_calls = []
+
+        async def fake_batch_extract(texts: list[str]):
+            batch_calls.append(list(texts))
+            return [
+                ExtractionResult(
+                    characters=[],
+                    relationships=[
+                        Relationship(
+                            source="Alice",
+                            target="Bob",
+                            relation=RelationshipType.friend,
+                            evidence=text,
+                        )
+                    ],
+                    sentiments=[],
+                )
+                for text in texts
+            ]
+
+        async def fake_extract(*, text: str):
+            batch_calls.append([text])
+            return ExtractionResult(
+                characters=[],
+                relationships=[
+                    Relationship(
+                        source="Alice",
+                        target="Bob",
+                        relation=RelationshipType.friend,
+                        evidence=text,
+                    )
+                ],
+                sentiments=[],
+            )
+
+        await process_chunks(
+            chunks,
+            confirm_continue=lambda _remaining: True,
+            rate_limit_every=0,
+            batch_size=3,
+            max_batch_tokens=100,
+            extractor=fake_extract,
+            batch_extractor=fake_batch_extract,
+        )
+
+        self.assertEqual(
+            batch_calls,
+            [["Alpha paragraph."], ["Beta paragraph.", "Gamma paragraph."]],
+        )
 
     async def test_process_chunks_spreads_requests_across_the_rate_window(self):
         chunks = [

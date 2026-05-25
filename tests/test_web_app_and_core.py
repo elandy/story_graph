@@ -4,6 +4,7 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -26,6 +27,8 @@ from story_graph.extraction.models import (
 )
 from story_graph.pipeline import StoryGraphRunConfig, run_story_graph_pipeline_from_file
 from story_graph.web.app import DEFAULT_JOBS_ROOT, create_app
+from story_graph.web.jobs import JobManager
+from story_graph.web.models import JobState, JobStatus
 from story_graph.web.ui import render_index_page
 
 
@@ -108,6 +111,8 @@ class UiMarkupTests(unittest.TestCase):
 
         self.assertIn('/static/app.css', html)
         self.assertIn('/static/app.js', html)
+        self.assertIn('job-search-input', html)
+        self.assertIn('job-state-filter', html)
         self.assertNotIn("<iframe", html)
 
 
@@ -209,6 +214,7 @@ class WebAppTests(unittest.TestCase):
                 js_response = client.get("/static/app.js")
                 self.assertEqual(js_response.status_code, 200)
                 self.assertIn("const form = document.getElementById", js_response.text)
+                self.assertIn("window.confirm", js_response.text)
 
     def test_second_job_stays_queued_while_first_job_is_running(self):
         first_started = threading.Event()
@@ -390,6 +396,41 @@ class WebAppTests(unittest.TestCase):
                     completed_status = client.get(f"/jobs/{job_id}").json()
                     self.assertEqual(completed_status["completed_chunks"], 2)
                     self.assertEqual(calls, ["First paragraph.", "Second paragraph."])
+
+    def test_manager_cleans_up_expired_terminal_jobs_on_start(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            jobs_root = Path(temp_dir) / "jobs"
+            expired_job_id = "expiredjob"
+            fresh_job_id = "freshjob"
+
+            for job_id, state, age_days in (
+                (expired_job_id, JobState.completed, 45),
+                (fresh_job_id, JobState.completed, 1),
+            ):
+                workspace = jobs_root / job_id
+                workspace.mkdir(parents=True, exist_ok=True)
+                updated_at = datetime.now(UTC) - timedelta(days=age_days)
+                status = JobStatus(
+                    job_id=job_id,
+                    state=state,
+                    stage=state.value,
+                    message="stored job",
+                    created_at=updated_at,
+                    updated_at=updated_at,
+                    original_filename=f"{job_id}.txt",
+                    workspace=str(workspace),
+                )
+                (workspace / "status.json").write_text(
+                    status.model_dump_json(indent=2),
+                    encoding="utf-8",
+                )
+
+            manager = JobManager(jobs_root, retention_days=30)
+            manager.start()
+            manager.stop()
+
+            self.assertFalse((jobs_root / expired_job_id).exists())
+            self.assertTrue((jobs_root / fresh_job_id).exists())
 
     def test_transient_extraction_error_is_retried_without_manual_resume(self):
         attempts = 0

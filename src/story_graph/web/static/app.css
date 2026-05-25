@@ -138,6 +138,16 @@ input[type="file"] {
   background: rgba(255, 255, 255, 0.9);
 }
 
+.field input[type="search"],
+.field select {
+  width: 100%;
+  border: 1px solid rgba(31, 29, 27, 0.12);
+  border-radius: 12px;
+  padding: 0.65rem 0.8rem;
+  font: inherit;
+  background: rgba(255, 255, 255, 0.9);
+}
+
 .checkbox {
   display: flex;
   gap: 0.75rem;
@@ -247,6 +257,12 @@ progress::-webkit-progress-value {
   font-size: 1rem;
 }
 
+.history-filters {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(180px, 0.8fr);
+}
+
 .job-list {
   display: grid;
   gap: 0.6rem;
@@ -345,5 +361,9 @@ progress::-webkit-progress-value {
   .hero,
   .panel {
     border-radius: 20px;
+  }
+
+  .history-filters {
+    grid-template-columns: 1fr;
   }
 }

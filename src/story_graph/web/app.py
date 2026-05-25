@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 
 from starlette.applications import Starlette
@@ -15,10 +16,11 @@ from story_graph.web.ui import STATIC_DIR, render_index_page
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_JOBS_ROOT = PROJECT_ROOT / "data" / "jobs"
+DEFAULT_RETENTION_DAYS = int(os.getenv("STORY_GRAPH_JOB_RETENTION_DAYS", "30"))
 
 
-def create_app(jobs_root: Path | None = None) -> Starlette:
-    manager = JobManager(jobs_root or DEFAULT_JOBS_ROOT)
+def create_app(jobs_root: Path | None = None, retention_days: int = DEFAULT_RETENTION_DAYS) -> Starlette:
+    manager = JobManager(jobs_root or DEFAULT_JOBS_ROOT, retention_days=retention_days)
 
     @asynccontextmanager
     async def lifespan(app: Starlette):
@@ -94,6 +96,11 @@ async def create_job(request: Request) -> JSONResponse:
             field_name="batch_size",
             default=4,
         )
+        max_batch_tokens = _parse_positive_int(
+            form.get("max_batch_tokens"),
+            field_name="max_batch_tokens",
+            default=9000,
+        )
         status = request.app.state.job_manager.create_job(
             upload_name=filename,
             file_bytes=raw_bytes,
@@ -102,6 +109,7 @@ async def create_job(request: Request) -> JSONResponse:
             max_chunk_tokens=max_chunk_tokens,
             max_paragraphs_per_chunk=max_paragraphs_per_chunk,
             batch_size=batch_size,
+            max_batch_tokens=max_batch_tokens,
         )
     except UnicodeDecodeError:
         return JSONResponse(

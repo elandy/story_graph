@@ -3,11 +3,14 @@ const fileInput = document.getElementById("file-input");
 const selectedFile = document.getElementById("selected-file");
 const submitButton = document.getElementById("submit-button");
 const refreshJobsButton = document.getElementById("refresh-jobs-button");
+const jobSearchInput = document.getElementById("job-search-input");
+const jobStateFilter = document.getElementById("job-state-filter");
 const jobList = document.getElementById("job-list");
 
 const activeJobStorageKey = "storyGraphActiveJobId";
 let activeJobId = window.localStorage.getItem(activeJobStorageKey);
 let pollTimer = null;
+let allJobs = [];
 
 fileInput.addEventListener("change", () => {
   const file = fileInput.files && fileInput.files[0];
@@ -16,6 +19,14 @@ fileInput.addEventListener("change", () => {
 
 refreshJobsButton.addEventListener("click", () => {
   loadJobs();
+});
+
+jobSearchInput.addEventListener("input", () => {
+  renderVisibleJobs();
+});
+
+jobStateFilter.addEventListener("change", () => {
+  renderVisibleJobs();
 });
 
 jobList.addEventListener("click", async (event) => {
@@ -143,19 +154,39 @@ async function loadJobs() {
     if (!response.ok) {
       throw new Error(payload.error || "Failed to load jobs.");
     }
-    renderJobs(payload.jobs || []);
+    allJobs = payload.jobs || [];
+    renderVisibleJobs();
   } catch (error) {
     jobList.innerHTML = `<div class="job-row">${escapeHtml(error.message)}</div>`;
   }
 }
 
+function renderVisibleJobs() {
+  const jobs = filterJobs(allJobs);
+  renderJobs(jobs);
+}
+
 function renderJobs(jobs) {
   if (!jobs.length) {
-    jobList.innerHTML = '<div class="job-row">No jobs yet.</div>';
+    jobList.innerHTML = allJobs.length
+      ? '<div class="job-row">No jobs match the current filters.</div>'
+      : '<div class="job-row">No jobs yet.</div>';
     return;
   }
 
   jobList.innerHTML = jobs.map((job) => renderJobRow(job)).join("");
+}
+
+function filterJobs(jobs) {
+  const query = (jobSearchInput.value || "").trim().toLowerCase();
+  const state = jobStateFilter.value || "all";
+
+  return jobs.filter((job) => {
+    const matchesState = state === "all" || job.state === state;
+    const haystack = `${job.original_filename || ""} ${job.job_id || ""}`.toLowerCase();
+    const matchesQuery = !query || haystack.includes(query);
+    return matchesState && matchesQuery;
+  });
 }
 
 function renderJobRow(job) {
@@ -305,6 +336,10 @@ async function pauseJob(jobId) {
 
 async function deleteJob(jobId) {
   try {
+    if (!window.confirm("Delete this job and all of its saved artifacts?")) {
+      return;
+    }
+
     const response = await fetch(`/jobs/${jobId}`, { method: "DELETE" });
     let payload = {};
     if (response.status !== 204) {

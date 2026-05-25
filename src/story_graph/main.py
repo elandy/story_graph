@@ -21,6 +21,8 @@ def parse_args():
                         help="Maximum paragraphs per chunk (0 disables the paragraph cap)")
     parser.add_argument("--batch-size", type=int, default=4,
                         help="How many chunks to send in each extraction request")
+    parser.add_argument("--max-batch-tokens", type=int, default=9000,
+                        help="Estimated token budget for each batched extraction request")
     parser.add_argument("--debug-prints", action="store_true",
                         help="Enable verbose debug prints")
     parser.add_argument("--debug-json", action="store_true",
@@ -44,6 +46,7 @@ async def main():
             max_chunk_tokens=args.max_chunk_tokens,
             max_paragraphs_per_chunk=args.max_paragraphs_per_chunk,
             batch_size=args.batch_size,
+            max_batch_tokens=args.max_batch_tokens,
             debug_json=args.debug_json,
             checkpoint_path=Path(checkpoint_path) if checkpoint_path else None,
             reset_checkpoint=args.reset_checkpoint,

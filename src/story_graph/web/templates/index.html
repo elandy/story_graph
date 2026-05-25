@@ -47,6 +47,11 @@
             <input name="batch_size" type="number" min="1" step="1" value="4">
           </label>
 
+          <label class="field">
+            <span>Max batch tokens</span>
+            <input name="max_batch_tokens" type="number" min="1" step="1" value="9000">
+          </label>
+
           <label class="field checkbox">
             <input name="apply_nlp_filter" type="checkbox" value="true">
             <span>Apply the optional NLP pre-filter before extraction.</span>
@@ -60,6 +65,23 @@
         <div class="history-head">
           <h2>Jobs</h2>
           <button class="button-secondary button-small" id="refresh-jobs-button" type="button">Refresh</button>
+        </div>
+        <div class="history-filters">
+          <label class="field">
+            <span>Search jobs</span>
+            <input id="job-search-input" type="search" placeholder="Filter by file name or job id">
+          </label>
+          <label class="field">
+            <span>State</span>
+            <select id="job-state-filter">
+              <option value="all">All states</option>
+              <option value="queued">Queued</option>
+              <option value="running">Running</option>
+              <option value="paused">Paused</option>
+              <option value="failed">Failed</option>
+              <option value="completed">Completed</option>
+            </select>
+          </label>
         </div>
         <div class="job-list" id="job-list"></div>
       </section>

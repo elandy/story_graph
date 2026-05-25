@@ -29,6 +29,7 @@ class StoryGraphRunConfig:
     max_paragraphs_per_chunk: int = 80
     chunk_overlap: int = 0
     batch_size: int = 4
+    max_batch_tokens: int = 9000
     output_html_path: Path = field(default_factory=lambda: Path("story_graph.html"))
     debug_json_path: Path | None = None
     confirm_extraction: Callable[[int], bool] | None = None
@@ -90,6 +91,8 @@ async def run_story_graph_pipeline(
         raise ValueError("chunk_overlap must be zero or a positive integer.")
     if config.batch_size <= 0:
         raise ValueError("batch_size must be a positive integer.")
+    if config.max_batch_tokens <= 0:
+        raise ValueError("max_batch_tokens must be a positive integer.")
 
     paragraphs = split_paragraphs(text)
     emit_progress(
@@ -153,7 +156,8 @@ async def run_story_graph_pipeline(
                 "Chunking config: "
                 f"max_tokens={config.max_chunk_tokens or 'off'}, "
                 f"max_paragraphs={config.max_paragraphs_per_chunk or 'off'}, "
-                f"batch_size={config.batch_size}"
+                f"batch_size={config.batch_size}, "
+                f"max_batch_tokens={config.max_batch_tokens}"
             ),
             total_paragraphs=len(paragraphs),
             total_chunks_raw=total_chunks_raw,
@@ -220,6 +224,7 @@ async def run_story_graph_pipeline(
         retry_backoff_base_seconds=config.retry_backoff_base_seconds,
         retry_backoff_max_seconds=config.retry_backoff_max_seconds,
         batch_size=config.batch_size,
+        max_batch_tokens=config.max_batch_tokens,
     )
 
     total_characters = sum(len(result.characters) for result in results)

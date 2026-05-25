@@ -141,6 +141,7 @@ async def process_chunks(
     retry_backoff_base_seconds: float = 2.0,
     retry_backoff_max_seconds: float = 60.0,
     batch_size: int = 4,
+    max_batch_tokens: int = 9000,
     extractor: Callable[..., Awaitable[ExtractionResult]] | None = None,
     batch_extractor: Callable[[list[str]], Awaitable[list[ExtractionResult]]] | None = None,
     now_fn: Callable[[], float] | None = None,
@@ -150,6 +151,8 @@ async def process_chunks(
         return []
     if batch_size <= 0:
         raise ValueError("batch_size must be a positive integer.")
+    if max_batch_tokens <= 0:
+        raise ValueError("max_batch_tokens must be a positive integer.")
 
     extractor_fn = extractor or extract_relationships
     batch_extractor_fn = batch_extractor or extract_relationships_batch
@@ -246,7 +249,12 @@ async def process_chunks(
             )
             raise ExtractionPaused("Extraction paused.")
 
-        batch_chunks = chunks[chunk_index:min(chunk_index + batch_size, len(chunks))]
+        batch_chunks = _select_batch_chunks(
+            chunks,
+            start_index=chunk_index,
+            batch_size=batch_size,
+            max_batch_tokens=max_batch_tokens,
+        )
         batch_start = chunk_index + 1
         batch_end = batch_start + len(batch_chunks) - 1
         emit_progress(
@@ -363,3 +371,33 @@ def _validate_batch_results(results: list[ExtractionResult], expected_count: int
         raise ValueError(
             f"Expected {expected_count} extraction result(s) from the batch, got {len(results)}."
         )
+
+
+def _select_batch_chunks(
+    chunks: list[dict],
+    *,
+    start_index: int,
+    batch_size: int,
+    max_batch_tokens: int,
+) -> list[dict]:
+    selected = []
+    token_total = 0
+
+    for chunk in chunks[start_index:]:
+        if len(selected) >= batch_size:
+            break
+
+        chunk_tokens = int(chunk.get("token_estimate", 0) or 0)
+        separator_tokens = 8 if selected else 0
+        proposed_total = token_total + separator_tokens + chunk_tokens
+
+        if selected and proposed_total > max_batch_tokens:
+            break
+
+        selected.append(chunk)
+        token_total = proposed_total
+
+    if not selected and start_index < len(chunks):
+        return [chunks[start_index]]
+
+    return selected

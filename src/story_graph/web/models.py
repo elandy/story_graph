@@ -34,6 +34,7 @@ class JobStatus(BaseModel):
     max_chunk_tokens: int = 3000
     max_paragraphs_per_chunk: int = 80
     batch_size: int = 4
+    max_batch_tokens: int = 9000
     total_paragraphs: int = 0
     total_chunks_raw: int = 0
     filtered_out_chunks: int = 0

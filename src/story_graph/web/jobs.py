@@ -30,8 +30,9 @@ class JobDeleteError(ValueError):
 
 
 class JobManager:
-    def __init__(self, jobs_root: Path):
+    def __init__(self, jobs_root: Path, retention_days: int = 30):
         self.jobs_root = Path(jobs_root).resolve()
+        self.retention_days = retention_days
         self._queue: Queue[str | None] = Queue()
         self._stop_event = threading.Event()
         self._write_lock = threading.RLock()
@@ -42,6 +43,7 @@ class JobManager:
         if self._worker is not None and self._worker.is_alive():
             return
         self._stop_event.clear()
+        self._cleanup_expired_jobs()
         self._requeue_incomplete_jobs()
         self._worker = threading.Thread(
             target=self._worker_loop,
@@ -67,6 +69,7 @@ class JobManager:
         max_chunk_tokens: int = 3000,
         max_paragraphs_per_chunk: int = 80,
         batch_size: int = 4,
+        max_batch_tokens: int = 9000,
     ) -> JobStatus:
         if max_chunks < 0:
             raise ValueError("max_chunks must be zero or a positive integer.")
@@ -76,6 +79,8 @@ class JobManager:
             raise ValueError("max_paragraphs_per_chunk must be zero or a positive integer.")
         if batch_size <= 0:
             raise ValueError("batch_size must be a positive integer.")
+        if max_batch_tokens <= 0:
+            raise ValueError("max_batch_tokens must be a positive integer.")
 
         self.jobs_root.mkdir(parents=True, exist_ok=True)
 
@@ -101,6 +106,7 @@ class JobManager:
             max_chunk_tokens=max_chunk_tokens,
             max_paragraphs_per_chunk=max_paragraphs_per_chunk,
             batch_size=batch_size,
+            max_batch_tokens=max_batch_tokens,
         )
 
         self._input_path(job_id).write_text(text, encoding="utf-8")
@@ -277,6 +283,7 @@ class JobManager:
                         max_chunk_tokens=status.max_chunk_tokens,
                         max_paragraphs_per_chunk=status.max_paragraphs_per_chunk,
                         batch_size=status.batch_size,
+                        max_batch_tokens=status.max_batch_tokens,
                         debug_json=True,
                         checkpoint_path=checkpoint_path,
                         reset_checkpoint=False,
@@ -387,6 +394,27 @@ class JobManager:
             return self.get_status(job_id).pause_requested
         except JobNotFoundError:
             return False
+
+    def _cleanup_expired_jobs(self) -> None:
+        if self.retention_days <= 0:
+            return
+
+        cutoff = _utc_now().timestamp() - (self.retention_days * 86400)
+        for status_path in self.jobs_root.glob("*/status.json"):
+            try:
+                status = JobStatus.model_validate_json(status_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+
+            if status.state not in {JobState.completed, JobState.failed, JobState.paused}:
+                continue
+
+            if status.updated_at.timestamp() > cutoff:
+                continue
+
+            workspace = self._workspace(status.job_id)
+            if workspace.exists():
+                shutil.rmtree(workspace, ignore_errors=True)
 
 
 def _utc_now() -> datetime:
