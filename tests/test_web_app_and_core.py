@@ -1,0 +1,315 @@
+import asyncio
+import sys
+import tempfile
+import threading
+import time
+import unittest
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+from starlette.testclient import TestClient
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+
+from story_graph.extraction.models import (
+    Character,
+    ExtractionResult,
+    Relationship,
+    RelationshipType,
+    Sentiment,
+    SentimentType,
+)
+from story_graph.pipeline import StoryGraphRunConfig, run_story_graph_pipeline_from_file
+from story_graph.web.app import DEFAULT_JOBS_ROOT, create_app
+from story_graph.web.ui import render_index_page
+
+
+def _build_extraction_result(evidence: str) -> ExtractionResult:
+    return ExtractionResult(
+        characters=[
+            Character(name="Alice", aliases=["A."]),
+            Character(name="Bob", aliases=["B."]),
+        ],
+        relationships=[
+            Relationship(
+                source="Alice",
+                target="Bob",
+                relation=RelationshipType.friend,
+                evidence=evidence,
+            )
+        ],
+        sentiments=[
+            Sentiment(
+                source="Alice",
+                target="Bob",
+                sentiment=SentimentType.trust,
+                evidence=evidence,
+            )
+        ],
+    )
+
+
+def _wait_for(predicate, timeout: float = 5.0, interval: float = 0.05) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return False
+
+
+class SharedPipelineCoreTests(unittest.IsolatedAsyncioTestCase):
+    async def test_run_story_graph_pipeline_from_file_writes_outputs(self):
+        progress_messages = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            input_path = temp_path / "story.txt"
+            input_path.write_text("Alice meets Bob.", encoding="utf-8")
+
+            with patch(
+                "story_graph.extraction.pipeline.extract_relationships",
+                new=AsyncMock(return_value=_build_extraction_result("Alice meets Bob.")),
+            ):
+                result = await run_story_graph_pipeline_from_file(
+                    input_path,
+                    StoryGraphRunConfig(
+                        checkpoint_path=temp_path / "checkpoint.json",
+                        output_html_path=temp_path / "graph.html",
+                        debug_json=True,
+                        debug_json_path=temp_path / "debug_relationships.json",
+                        confirm_extraction=lambda _remaining: True,
+                        progress_callback=lambda update: progress_messages.append(update.message),
+                    ),
+                )
+
+            self.assertEqual(result.total_chunks_to_process, 1)
+            self.assertEqual(result.total_relationships, 1)
+            self.assertEqual(result.total_sentiments, 1)
+            self.assertTrue((temp_path / "checkpoint.json").exists())
+            self.assertTrue((temp_path / "graph.html").exists())
+            self.assertTrue((temp_path / "debug_relationships.json").exists())
+            self.assertTrue(
+                any(message.startswith("Extraction checkpoint:") for message in progress_messages)
+            )
+            self.assertTrue(
+                any(message.startswith("Graph HTML written to") for message in progress_messages)
+            )
+
+
+class UiMarkupTests(unittest.TestCase):
+    def test_rendered_page_preserves_hidden_attribute_behavior(self):
+        html = render_index_page()
+
+        self.assertIn("[hidden] {", html)
+        self.assertIn("display: none !important;", html)
+
+
+class WebAppTests(unittest.TestCase):
+    def test_default_jobs_root_is_repo_data_jobs(self):
+        self.assertTrue(DEFAULT_JOBS_ROOT.is_absolute())
+        self.assertEqual(DEFAULT_JOBS_ROOT, ROOT / "data" / "jobs")
+
+    def test_upload_job_completes_and_serves_graph(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            jobs_root = Path(temp_dir) / "jobs"
+
+            with patch(
+                "story_graph.extraction.pipeline.extract_relationships",
+                new=AsyncMock(return_value=_build_extraction_result("Alice meets Bob.")),
+            ):
+                with TestClient(create_app(jobs_root=jobs_root)) as client:
+                    response = client.post(
+                        "/jobs",
+                        files={"file": ("story.txt", b"Alice meets Bob.", "text/plain")},
+                    )
+                    self.assertEqual(response.status_code, 202)
+                    payload = response.json()
+                    job_id = payload["job_id"]
+
+                    self.assertTrue(
+                        _wait_for(
+                            lambda: client.get(f"/jobs/{job_id}").json()["state"] == "completed"
+                        )
+                    )
+
+                    status = client.get(f"/jobs/{job_id}").json()
+                    self.assertEqual(status["state"], "completed")
+                    self.assertEqual(status["completed_chunks"], 1)
+                    self.assertEqual(status["total_relationships"], 1)
+
+                    jobs_response = client.get("/jobs")
+                    self.assertEqual(jobs_response.status_code, 200)
+                    jobs_payload = jobs_response.json()
+                    self.assertEqual(len(jobs_payload["jobs"]), 1)
+                    self.assertEqual(jobs_payload["jobs"][0]["job_id"], job_id)
+
+                    retry_response = client.post(f"/jobs/{job_id}/retry")
+                    self.assertEqual(retry_response.status_code, 409)
+
+                    graph_response = client.get(f"/jobs/{job_id}/graph")
+                    self.assertEqual(graph_response.status_code, 200)
+                    self.assertIn("Alice", graph_response.text)
+
+                    workspace = jobs_root / job_id
+                    self.assertTrue((workspace / "input.txt").exists())
+                    self.assertTrue((workspace / "checkpoint.json").exists())
+                    self.assertTrue((workspace / "story_graph.html").exists())
+                    self.assertTrue((workspace / "debug_relationships.json").exists())
+                    self.assertTrue((workspace / "status.json").exists())
+
+    def test_second_job_stays_queued_while_first_job_is_running(self):
+        first_started = threading.Event()
+        release_first = threading.Event()
+
+        async def fake_extract(text: str):
+            if text.startswith("First"):
+                first_started.set()
+                await asyncio.to_thread(release_first.wait, 2)
+            return _build_extraction_result(text)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            jobs_root = Path(temp_dir) / "jobs"
+
+            with patch("story_graph.extraction.pipeline.extract_relationships", new=fake_extract):
+                with TestClient(create_app(jobs_root=jobs_root)) as client:
+                    first_response = client.post(
+                        "/jobs",
+                        files={"file": ("first.txt", b"First story paragraph.", "text/plain")},
+                    )
+                    self.assertEqual(first_response.status_code, 202)
+                    first_job_id = first_response.json()["job_id"]
+
+                    self.assertTrue(first_started.wait(timeout=2))
+                    first_status = client.get(f"/jobs/{first_job_id}").json()
+                    self.assertEqual(first_status["state"], "running")
+
+                    second_response = client.post(
+                        "/jobs",
+                        files={"file": ("second.txt", b"Second story paragraph.", "text/plain")},
+                    )
+                    self.assertEqual(second_response.status_code, 202)
+                    second_job_id = second_response.json()["job_id"]
+
+                    second_status = client.get(f"/jobs/{second_job_id}").json()
+                    self.assertEqual(second_status["state"], "queued")
+
+                    release_first.set()
+
+                    self.assertTrue(
+                        _wait_for(
+                            lambda: client.get(f"/jobs/{first_job_id}").json()["state"] == "completed"
+                        )
+                    )
+                    self.assertTrue(
+                        _wait_for(
+                            lambda: client.get(f"/jobs/{second_job_id}").json()["state"] == "completed"
+                        )
+                    )
+
+    def test_failed_job_can_resume_from_checkpoint(self):
+        calls = []
+        failed_once = False
+
+        async def flaky_extract(text: str):
+            nonlocal failed_once
+            calls.append(text)
+            if "Paragraph 40." in text and not failed_once:
+                failed_once = True
+                raise ValueError("invalid extraction payload")
+            return _build_extraction_result(text.split("\n\n")[0])
+
+        paragraphs = [f"Paragraph {index}." for index in range(41)]
+        book = "\n\n".join(paragraphs).encode("utf-8")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            jobs_root = Path(temp_dir) / "jobs"
+
+            with patch("story_graph.extraction.pipeline.extract_relationships", new=flaky_extract), patch(
+                "story_graph.extraction.pipeline.asyncio.sleep",
+                new=AsyncMock(),
+            ):
+                with TestClient(create_app(jobs_root=jobs_root)) as client:
+                    response = client.post(
+                        "/jobs",
+                        data={
+                            "max_chunks": "2",
+                            "max_paragraphs_per_chunk": "40",
+                            "batch_size": "1",
+                        },
+                        files={"file": ("story.txt", book, "text/plain")},
+                    )
+                    self.assertEqual(response.status_code, 202)
+                    job_id = response.json()["job_id"]
+
+                    self.assertTrue(
+                        _wait_for(
+                            lambda: client.get(f"/jobs/{job_id}").json()["state"] == "failed"
+                        )
+                    )
+
+                    failed_status = client.get(f"/jobs/{job_id}").json()
+                    self.assertEqual(failed_status["completed_chunks"], 1)
+                    self.assertTrue((jobs_root / job_id / "checkpoint.json").exists())
+
+                    retry_response = client.post(f"/jobs/{job_id}/retry")
+                    self.assertEqual(retry_response.status_code, 202)
+                    self.assertEqual(retry_response.json()["state"], "queued")
+
+                    self.assertTrue(
+                        _wait_for(
+                            lambda: client.get(f"/jobs/{job_id}").json()["state"] == "completed"
+                        )
+                    )
+
+                    completed_status = client.get(f"/jobs/{job_id}").json()
+                    self.assertEqual(completed_status["completed_chunks"], 2)
+                    self.assertEqual(
+                        sum("Paragraph 0." in call for call in calls),
+                        1,
+                    )
+                    self.assertEqual(
+                        sum("Paragraph 40." in call for call in calls),
+                        2,
+                    )
+
+    def test_transient_extraction_error_is_retried_without_manual_resume(self):
+        attempts = 0
+
+        async def flaky_extract(text: str):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("temporary outage")
+            return _build_extraction_result(text)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            jobs_root = Path(temp_dir) / "jobs"
+
+            with patch("story_graph.extraction.pipeline.extract_relationships", new=flaky_extract), patch(
+                "story_graph.extraction.pipeline.asyncio.sleep",
+                new=AsyncMock(),
+            ):
+                with TestClient(create_app(jobs_root=jobs_root)) as client:
+                    response = client.post(
+                        "/jobs",
+                        files={"file": ("story.txt", b"Alice meets Bob.", "text/plain")},
+                    )
+                    self.assertEqual(response.status_code, 202)
+                    job_id = response.json()["job_id"]
+
+                    self.assertTrue(
+                        _wait_for(
+                            lambda: client.get(f"/jobs/{job_id}").json()["state"] == "completed"
+                        )
+                    )
+
+                    status = client.get(f"/jobs/{job_id}").json()
+                    self.assertEqual(status["state"], "completed")
+                    self.assertEqual(status["completed_chunks"], 1)
+                    self.assertEqual(attempts, 2)

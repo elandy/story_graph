@@ -75,11 +75,29 @@ async def create_job(request: Request) -> JSONResponse:
 
     try:
         max_chunks = _parse_max_chunks(form.get("max_chunks"))
+        max_chunk_tokens = _parse_non_negative_int(
+            form.get("max_chunk_tokens"),
+            field_name="max_chunk_tokens",
+            default=3000,
+        )
+        max_paragraphs_per_chunk = _parse_non_negative_int(
+            form.get("max_paragraphs_per_chunk"),
+            field_name="max_paragraphs_per_chunk",
+            default=80,
+        )
+        batch_size = _parse_positive_int(
+            form.get("batch_size"),
+            field_name="batch_size",
+            default=4,
+        )
         status = request.app.state.job_manager.create_job(
             upload_name=filename,
             file_bytes=raw_bytes,
             apply_nlp_filter=apply_nlp_filter,
             max_chunks=max_chunks,
+            max_chunk_tokens=max_chunk_tokens,
+            max_paragraphs_per_chunk=max_paragraphs_per_chunk,
+            batch_size=batch_size,
         )
     except UnicodeDecodeError:
         return JSONResponse(
@@ -150,6 +168,26 @@ def _parse_max_chunks(raw_value) -> int:
     value = int(raw_value)
     if value < 0:
         raise ValueError("max_chunks must be zero or a positive integer.")
+    return value
+
+
+def _parse_non_negative_int(raw_value, *, field_name: str, default: int = 0) -> int:
+    if raw_value in (None, ""):
+        return default
+
+    value = int(raw_value)
+    if value < 0:
+        raise ValueError(f"{field_name} must be zero or a positive integer.")
+    return value
+
+
+def _parse_positive_int(raw_value, *, field_name: str, default: int) -> int:
+    if raw_value in (None, ""):
+        return default
+
+    value = int(raw_value)
+    if value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer.")
     return value
 
 

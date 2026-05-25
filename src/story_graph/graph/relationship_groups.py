@@ -12,14 +12,18 @@ Relations in different groups can coexist (e.g. enemy and lover at the same time
 # so only one "teaching" role per pair at a time (Snape vs Lucius as teacher).
 RELATIONSHIP_EXCLUSION_GROUPS = {
     "social": {
-        "friend", "acquaintance", "colleague", "neighbor", "ally", "rival",
+        "friend", "acquaintance", "classmate", "colleague", "teammate", "roommate",
+        "neighbor", "ally", "rival",
         "enemy", "nemesis", "betrayer", "victim",
     },
     "romantic": {
-        "romantic_interest", "lover", "ex_lover", "unrequited_love",
+        "romantic_interest", "lover", "fiance", "ex_lover", "unrequited_love",
     },
     "family": {
-        "parent", "child", "sibling", "spouse", "ex_spouse", "guardian", "ward",
+        "parent", "child", "grandparent", "grandchild", "sibling",
+        "aunt", "uncle", "niece", "nephew", "cousin",
+        "step_parent", "step_child",
+        "spouse", "ex_spouse", "guardian", "ward",
     },
     "professional_authority": {
         "leader", "subordinate", "commander", "soldier",

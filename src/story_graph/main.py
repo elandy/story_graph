@@ -15,6 +15,12 @@ def parse_args():
                         help="Filter chunks using NLP character interaction")
     parser.add_argument("--max-chunks", type=int, default=0,
                         help="Maximum number of chunks to process")
+    parser.add_argument("--max-chunk-tokens", type=int, default=3000,
+                        help="Estimated token budget per chunk (0 disables the token cap)")
+    parser.add_argument("--max-paragraphs-per-chunk", type=int, default=80,
+                        help="Maximum paragraphs per chunk (0 disables the paragraph cap)")
+    parser.add_argument("--batch-size", type=int, default=4,
+                        help="How many chunks to send in each extraction request")
     parser.add_argument("--debug-prints", action="store_true",
                         help="Enable verbose debug prints")
     parser.add_argument("--debug-json", action="store_true",
@@ -35,6 +41,9 @@ async def main():
         StoryGraphRunConfig(
             apply_nlp_filter=args.apply_nlp_filter,
             max_chunks=args.max_chunks,
+            max_chunk_tokens=args.max_chunk_tokens,
+            max_paragraphs_per_chunk=args.max_paragraphs_per_chunk,
+            batch_size=args.batch_size,
             debug_json=args.debug_json,
             checkpoint_path=Path(checkpoint_path) if checkpoint_path else None,
             reset_checkpoint=args.reset_checkpoint,

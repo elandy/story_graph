@@ -54,9 +54,18 @@ class JobManager:
         file_bytes: bytes,
         apply_nlp_filter: bool = False,
         max_chunks: int = 0,
+        max_chunk_tokens: int = 3000,
+        max_paragraphs_per_chunk: int = 80,
+        batch_size: int = 4,
     ) -> JobStatus:
         if max_chunks < 0:
             raise ValueError("max_chunks must be zero or a positive integer.")
+        if max_chunk_tokens < 0:
+            raise ValueError("max_chunk_tokens must be zero or a positive integer.")
+        if max_paragraphs_per_chunk < 0:
+            raise ValueError("max_paragraphs_per_chunk must be zero or a positive integer.")
+        if batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer.")
 
         self.jobs_root.mkdir(parents=True, exist_ok=True)
 
@@ -79,6 +88,9 @@ class JobManager:
             workspace=str(workspace),
             apply_nlp_filter=apply_nlp_filter,
             max_chunks=max_chunks,
+            max_chunk_tokens=max_chunk_tokens,
+            max_paragraphs_per_chunk=max_paragraphs_per_chunk,
+            batch_size=batch_size,
         )
 
         self._input_path(job_id).write_text(text, encoding="utf-8")
@@ -208,6 +220,9 @@ class JobManager:
                     StoryGraphRunConfig(
                         apply_nlp_filter=status.apply_nlp_filter,
                         max_chunks=status.max_chunks,
+                        max_chunk_tokens=status.max_chunk_tokens,
+                        max_paragraphs_per_chunk=status.max_paragraphs_per_chunk,
+                        batch_size=status.batch_size,
                         debug_json=True,
                         checkpoint_path=checkpoint_path,
                         reset_checkpoint=False,

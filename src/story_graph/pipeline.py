@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from collections.abc import Callable
+from math import ceil
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -24,12 +25,19 @@ class StoryGraphRunConfig:
     debug_json: bool = False
     checkpoint_path: Path | None = None
     reset_checkpoint: bool = False
+    max_chunk_tokens: int = 3000
+    max_paragraphs_per_chunk: int = 80
+    chunk_overlap: int = 0
+    batch_size: int = 4
     output_html_path: Path = field(default_factory=lambda: Path("story_graph.html"))
     debug_json_path: Path | None = None
     confirm_extraction: Callable[[int], bool] | None = None
     progress_callback: ProgressCallback | None = None
     rate_limit_every: int = 5
     rate_limit_seconds: float = 60.0
+    max_retries: int = 3
+    retry_backoff_base_seconds: float = 2.0
+    retry_backoff_max_seconds: float = 60.0
 
 
 @dataclass(slots=True)
@@ -71,6 +79,16 @@ async def run_story_graph_pipeline(
 ) -> StoryGraphRunResult:
     if config.max_chunks < 0:
         raise ValueError("max_chunks must be zero or a positive integer.")
+    if config.max_retries < 0:
+        raise ValueError("max_retries must be zero or a positive integer.")
+    if config.max_chunk_tokens < 0:
+        raise ValueError("max_chunk_tokens must be zero or a positive integer.")
+    if config.max_paragraphs_per_chunk < 0:
+        raise ValueError("max_paragraphs_per_chunk must be zero or a positive integer.")
+    if config.chunk_overlap < 0:
+        raise ValueError("chunk_overlap must be zero or a positive integer.")
+    if config.batch_size <= 0:
+        raise ValueError("batch_size must be a positive integer.")
 
     paragraphs = split_paragraphs(text)
     emit_progress(
@@ -82,7 +100,12 @@ async def run_story_graph_pipeline(
         ),
     )
 
-    chunks = chunk_paragraphs(paragraphs)
+    chunks = chunk_paragraphs(
+        paragraphs,
+        max_tokens=config.max_chunk_tokens,
+        max_paragraphs=config.max_paragraphs_per_chunk,
+        overlap=config.chunk_overlap,
+    )
     total_chunks_raw = len(chunks)
     filtered_out_chunks = 0
 
@@ -125,6 +148,23 @@ async def run_story_graph_pipeline(
         config.progress_callback,
         PipelineProgressUpdate(
             stage="chunking",
+            message=(
+                "Chunking config: "
+                f"max_tokens={config.max_chunk_tokens or 'off'}, "
+                f"max_paragraphs={config.max_paragraphs_per_chunk or 'off'}, "
+                f"batch_size={config.batch_size}"
+            ),
+            total_paragraphs=len(paragraphs),
+            total_chunks_raw=total_chunks_raw,
+            filtered_out_chunks=filtered_out_chunks,
+            total_chunks_available=total_chunks_available,
+            total_chunks_to_process=total_chunks_to_process,
+        ),
+    )
+    emit_progress(
+        config.progress_callback,
+        PipelineProgressUpdate(
+            stage="chunking",
             message=f"Chunks to process: {total_chunks_to_process}",
             total_paragraphs=len(paragraphs),
             total_chunks_raw=total_chunks_raw,
@@ -134,10 +174,12 @@ async def run_story_graph_pipeline(
         ),
     )
 
-    sleeps = (total_chunks_to_process - 1) // config.rate_limit_every if (
-        total_chunks_to_process > 0 and config.rate_limit_every > 0
-    ) else 0
-    estimated_time_seconds = sleeps * int(config.rate_limit_seconds) + total_chunks_to_process * 10
+    estimated_time_seconds = _estimate_runtime_seconds(
+        total_chunks=total_chunks_to_process,
+        batch_size=config.batch_size,
+        rate_limit_every=config.rate_limit_every,
+        rate_limit_seconds=config.rate_limit_seconds,
+    )
     emit_progress(
         config.progress_callback,
         PipelineProgressUpdate(
@@ -172,6 +214,10 @@ async def run_story_graph_pipeline(
         progress_callback=config.progress_callback,
         rate_limit_every=config.rate_limit_every,
         rate_limit_seconds=config.rate_limit_seconds,
+        max_retries=config.max_retries,
+        retry_backoff_base_seconds=config.retry_backoff_base_seconds,
+        retry_backoff_max_seconds=config.retry_backoff_max_seconds,
+        batch_size=config.batch_size,
     )
 
     total_characters = sum(len(result.characters) for result in results)
@@ -267,3 +313,27 @@ def _resolve_checkpoint_path(
         return None
 
     return default_checkpoint_path(str(source_path), config.apply_nlp_filter)
+
+
+def _estimate_runtime_seconds(
+    total_chunks: int,
+    batch_size: int,
+    rate_limit_every: int,
+    rate_limit_seconds: float,
+) -> int:
+    if total_chunks <= 0:
+        return 0
+    if batch_size <= 0:
+        raise ValueError("batch_size must be a positive integer.")
+
+    total_requests = ceil(total_chunks / batch_size)
+    processing_seconds = total_requests * 10
+    if rate_limit_every <= 0 or rate_limit_seconds <= 0:
+        return processing_seconds
+
+    requests_per_second = rate_limit_every / rate_limit_seconds
+    if requests_per_second <= 0:
+        return processing_seconds
+
+    pacing_seconds = ceil((total_requests - 1) / requests_per_second) if total_requests > 1 else 0
+    return processing_seconds + pacing_seconds

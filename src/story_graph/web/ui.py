@@ -392,6 +392,21 @@ def render_index_page() -> str:
             <input name="max_chunks" type="number" min="0" step="1" placeholder="0 means full text">
           </label>
 
+          <label class="field">
+            <span>Max chunk tokens</span>
+            <input name="max_chunk_tokens" type="number" min="0" step="1" value="3000">
+          </label>
+
+          <label class="field">
+            <span>Max paragraphs per chunk</span>
+            <input name="max_paragraphs_per_chunk" type="number" min="0" step="1" value="80">
+          </label>
+
+          <label class="field">
+            <span>Batch size</span>
+            <input name="batch_size" type="number" min="1" step="1" value="4">
+          </label>
+
           <label class="field checkbox">
             <input name="apply_nlp_filter" type="checkbox" value="true">
             <span>Apply the optional NLP pre-filter before extraction.</span>

@@ -14,7 +14,10 @@ class RelationshipType(str, Enum):
     # social
     friend = "friend"
     acquaintance = "acquaintance"
+    classmate = "classmate"
     colleague = "colleague"
+    teammate = "teammate"
+    roommate = "roommate"
     neighbor = "neighbor"
     ally = "ally"
     rival = "rival"
@@ -28,8 +31,18 @@ class RelationshipType(str, Enum):
     # family
     parent = "parent"
     child = "child"
+    grandparent = "grandparent"
+    grandchild = "grandchild"
     sibling = "sibling"
+    aunt = "aunt"
+    uncle = "uncle"
+    niece = "niece"
+    nephew = "nephew"
+    cousin = "cousin"
+    step_parent = "step_parent"
+    step_child = "step_child"
     spouse = "spouse"
+    fiance = "fiance"
     ex_spouse = "ex_spouse"
     guardian = "guardian"
     ward = "ward"
@@ -153,3 +166,12 @@ class ExtractionResult(BaseModel):
     characters: List[Character]
     relationships: List[Relationship]
     sentiments: List[Sentiment]
+
+
+class BatchExtractionItem(BaseModel):
+    chunk_index: int
+    result: ExtractionResult
+
+
+class BatchExtractionResult(BaseModel):
+    items: List[BatchExtractionItem]
