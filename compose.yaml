@@ -1,0 +1,15 @@
+services:
+  story-graph:
+    build: .
+    container_name: story-graph
+
+    env_file:
+      - .env
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./data:/app/data
+
+    restart: unless-stopped
