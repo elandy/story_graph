@@ -30,6 +30,7 @@ class StoryGraphRunConfig:
     chunk_overlap: int = 0
     batch_size: int = 4
     max_batch_tokens: int = 9000
+    provider_api_key: str | None = None
     output_html_path: Path = field(default_factory=lambda: Path("story_graph.html"))
     debug_json_path: Path | None = None
     confirm_extraction: Callable[[int], bool] | None = None
@@ -225,6 +226,7 @@ async def run_story_graph_pipeline(
         retry_backoff_max_seconds=config.retry_backoff_max_seconds,
         batch_size=config.batch_size,
         max_batch_tokens=config.max_batch_tokens,
+        provider_api_key=config.provider_api_key,
     )
 
     total_characters = sum(len(result.characters) for result in results)

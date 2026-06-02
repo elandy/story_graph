@@ -114,6 +114,13 @@ class UiMarkupTests(unittest.TestCase):
         self.assertIn('job-search-input', html)
         self.assertIn('job-state-filter', html)
         self.assertNotIn("<iframe", html)
+        self.assertNotIn('name="api_key"', html)
+
+    def test_rendered_page_can_include_api_key_field(self):
+        html = render_index_page(show_api_key_field=True)
+
+        self.assertIn('name="api_key"', html)
+        self.assertIn('type="password"', html)
 
 
 class WebAppTests(unittest.TestCase):
@@ -125,13 +132,14 @@ class WebAppTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             jobs_root = Path(temp_dir) / "jobs"
 
-            with patch(
+            with patch.dict("os.environ", {}, clear=True), patch(
                 "story_graph.extraction.pipeline.extract_relationships",
                 new=AsyncMock(return_value=_build_extraction_result("Alice meets Bob.")),
             ):
                 with TestClient(create_app(jobs_root=jobs_root)) as client:
                     response = client.post(
                         "/jobs",
+                        data={"api_key": "test-api-key"},
                         files={"file": ("story.txt", b"Alice meets Bob.", "text/plain")},
                     )
                     self.assertEqual(response.status_code, 202)
@@ -164,22 +172,57 @@ class WebAppTests(unittest.TestCase):
 
                     workspace = jobs_root / job_id
                     self.assertTrue((workspace / "input.txt").exists())
+                    self.assertTrue((workspace / ".provider_api_key").exists())
                     self.assertTrue((workspace / "checkpoint.json").exists())
                     self.assertTrue((workspace / "story_graph.html").exists())
                     self.assertTrue((workspace / "debug_relationships.json").exists())
                     self.assertTrue((workspace / "status.json").exists())
 
+    def test_upload_requires_api_key_when_server_key_is_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            jobs_root = Path(temp_dir) / "jobs"
+
+            with patch.dict("os.environ", {}, clear=True):
+                with TestClient(create_app(jobs_root=jobs_root)) as client:
+                    response = client.post(
+                        "/jobs",
+                        files={"file": ("story.txt", b"Alice meets Bob.", "text/plain")},
+                    )
+                    self.assertEqual(response.status_code, 400)
+                    self.assertEqual(response.json()["error"], "An API key is required.")
+
+    def test_index_hides_api_key_field_when_server_key_is_configured(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            jobs_root = Path(temp_dir) / "jobs"
+
+            with patch.dict("os.environ", {"GOOGLE_API_KEY": "server-key"}, clear=True):
+                with TestClient(create_app(jobs_root=jobs_root)) as client:
+                    response = client.get("/")
+                    self.assertEqual(response.status_code, 200)
+                    self.assertNotIn('name="api_key"', response.text)
+
+    def test_index_shows_api_key_field_when_server_key_is_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            jobs_root = Path(temp_dir) / "jobs"
+
+            with patch.dict("os.environ", {}, clear=True):
+                with TestClient(create_app(jobs_root=jobs_root)) as client:
+                    response = client.get("/")
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn('name="api_key"', response.text)
+
     def test_completed_job_can_be_deleted(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             jobs_root = Path(temp_dir) / "jobs"
 
-            with patch(
+            with patch.dict("os.environ", {}, clear=True), patch(
                 "story_graph.extraction.pipeline.extract_relationships",
                 new=AsyncMock(return_value=_build_extraction_result("Alice meets Bob.")),
             ):
                 with TestClient(create_app(jobs_root=jobs_root)) as client:
                     response = client.post(
                         "/jobs",
+                        data={"api_key": "test-api-key"},
                         files={"file": ("story.txt", b"Alice meets Bob.", "text/plain")},
                     )
                     self.assertEqual(response.status_code, 202)
@@ -229,10 +272,11 @@ class WebAppTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             jobs_root = Path(temp_dir) / "jobs"
 
-            with patch("story_graph.extraction.pipeline.extract_relationships", new=fake_extract):
+            with patch.dict("os.environ", {}, clear=True), patch("story_graph.extraction.pipeline.extract_relationships", new=fake_extract):
                 with TestClient(create_app(jobs_root=jobs_root)) as client:
                     first_response = client.post(
                         "/jobs",
+                        data={"api_key": "test-api-key"},
                         files={"file": ("first.txt", b"First story paragraph.", "text/plain")},
                     )
                     self.assertEqual(first_response.status_code, 202)
@@ -244,6 +288,7 @@ class WebAppTests(unittest.TestCase):
 
                     second_response = client.post(
                         "/jobs",
+                        data={"api_key": "test-api-key"},
                         files={"file": ("second.txt", b"Second story paragraph.", "text/plain")},
                     )
                     self.assertEqual(second_response.status_code, 202)
@@ -283,7 +328,7 @@ class WebAppTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             jobs_root = Path(temp_dir) / "jobs"
 
-            with patch("story_graph.extraction.pipeline.extract_relationships", new=flaky_extract), patch(
+            with patch.dict("os.environ", {}, clear=True), patch("story_graph.extraction.pipeline.extract_relationships", new=flaky_extract), patch(
                 "story_graph.extraction.pipeline.asyncio.sleep",
                 new=AsyncMock(),
             ):
@@ -291,6 +336,7 @@ class WebAppTests(unittest.TestCase):
                     response = client.post(
                         "/jobs",
                         data={
+                            "api_key": "test-api-key",
                             "max_chunks": "2",
                             "max_paragraphs_per_chunk": "40",
                             "batch_size": "1",
@@ -346,11 +392,12 @@ class WebAppTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             jobs_root = Path(temp_dir) / "jobs"
 
-            with patch("story_graph.extraction.pipeline.extract_relationships", new=fake_extract):
+            with patch.dict("os.environ", {}, clear=True), patch("story_graph.extraction.pipeline.extract_relationships", new=fake_extract):
                 with TestClient(create_app(jobs_root=jobs_root)) as client:
                     response = client.post(
                         "/jobs",
                         data={
+                            "api_key": "test-api-key",
                             "max_paragraphs_per_chunk": "1",
                             "batch_size": "1",
                         },
@@ -435,9 +482,10 @@ class WebAppTests(unittest.TestCase):
     def test_transient_extraction_error_is_retried_without_manual_resume(self):
         attempts = 0
 
-        async def flaky_extract(text: str):
+        async def flaky_extract(text: str, api_key: str | None = None):
             nonlocal attempts
             attempts += 1
+            self.assertEqual(api_key, "user-api-key")
             if attempts == 1:
                 raise RuntimeError("temporary outage")
             return _build_extraction_result(text)
@@ -445,13 +493,17 @@ class WebAppTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             jobs_root = Path(temp_dir) / "jobs"
 
-            with patch("story_graph.extraction.pipeline.extract_relationships", new=flaky_extract), patch(
+            with patch.dict("os.environ", {}, clear=True), patch(
+                "story_graph.extraction.pipeline.extract_relationships",
+                new=flaky_extract,
+            ), patch(
                 "story_graph.extraction.pipeline.asyncio.sleep",
                 new=AsyncMock(),
             ):
                 with TestClient(create_app(jobs_root=jobs_root)) as client:
                     response = client.post(
                         "/jobs",
+                        data={"api_key": "user-api-key"},
                         files={"file": ("story.txt", b"Alice meets Bob.", "text/plain")},
                     )
                     self.assertEqual(response.status_code, 202)

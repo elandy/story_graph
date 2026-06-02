@@ -2,6 +2,8 @@ import json
 
 from dotenv import load_dotenv
 from pydantic_ai import Agent
+from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.providers.google import GoogleProvider
 
 from .models import BatchExtractionResult, ExtractionResult
 
@@ -9,7 +11,7 @@ from .models import BatchExtractionResult, ExtractionResult
 load_dotenv()
 
 
-MODEL_NAME = "google-gla:gemini-3.1-flash-lite"
+MODEL_NAME = "gemini-3.1-flash-lite"
 EXTRACTION_RULES = (
     "Rules:\n"
     "- Include relationships that are explicitly stated or clearly implied by the text.\n"
@@ -31,41 +33,63 @@ EXTRACTION_RULES = (
 )
 
 
-relationship_agent = Agent(
-    MODEL_NAME,
-    output_type=ExtractionResult,
-    system_prompt=(
-        "Extract characters, relationships, and sentiments from the text.\n"
-        f"{EXTRACTION_RULES}"
-    ),
-)
+def _build_relationship_agent(*, api_key: str | None = None) -> Agent:
+    if api_key:
+        model = GoogleModel(
+            MODEL_NAME,
+            provider=GoogleProvider(api_key=api_key),
+        )
+    else:
+        model = f"google-gla:{MODEL_NAME}"
+
+    return Agent(
+        model,
+        output_type=ExtractionResult,
+        system_prompt=(
+            "Extract characters, relationships, and sentiments from the text.\n"
+            f"{EXTRACTION_RULES}"
+        ),
+    )
 
 
-batch_relationship_agent = Agent(
-    MODEL_NAME,
-    output_type=BatchExtractionResult,
-    system_prompt=(
-        "Extract characters, relationships, and sentiments for each chunk in the JSON payload.\n"
-        "Return one item for every chunk.\n"
-        "- Each item must preserve its input chunk_index.\n"
-        "- Treat each chunk independently.\n"
-        "- If a chunk has no findings, return empty lists for that chunk.\n"
-        f"{EXTRACTION_RULES}"
-    ),
-)
+def _build_batch_relationship_agent(*, api_key: str | None = None) -> Agent:
+    if api_key:
+        model = GoogleModel(
+            MODEL_NAME,
+            provider=GoogleProvider(api_key=api_key),
+        )
+    else:
+        model = f"google-gla:{MODEL_NAME}"
+
+    return Agent(
+        model,
+        output_type=BatchExtractionResult,
+        system_prompt=(
+            "Extract characters, relationships, and sentiments for each chunk in the JSON payload.\n"
+            "Return one item for every chunk.\n"
+            "- Each item must preserve its input chunk_index.\n"
+            "- Treat each chunk independently.\n"
+            "- If a chunk has no findings, return empty lists for that chunk.\n"
+            f"{EXTRACTION_RULES}"
+        ),
+    )
 
 
-async def extract_relationships(text: str) -> ExtractionResult:
-    result = await relationship_agent.run(text)
+async def extract_relationships(text: str, api_key: str | None = None) -> ExtractionResult:
+    agent = _build_relationship_agent(api_key=api_key)
+    result = await agent.run(text)
     return result.output
 
 
-async def extract_relationships_batch(texts: list[str]) -> list[ExtractionResult]:
+async def extract_relationships_batch(
+    texts: list[str],
+    api_key: str | None = None,
+) -> list[ExtractionResult]:
     if not texts:
         return []
 
     if len(texts) == 1:
-        return [await extract_relationships(texts[0])]
+        return [await extract_relationships(texts[0], api_key=api_key)]
 
     payload = {
         "chunks": [
@@ -76,7 +100,8 @@ async def extract_relationships_batch(texts: list[str]) -> list[ExtractionResult
             for chunk_index, text in enumerate(texts)
         ]
     }
-    result = await batch_relationship_agent.run(
+    agent = _build_batch_relationship_agent(api_key=api_key)
+    result = await agent.run(
         json.dumps(payload, ensure_ascii=False, indent=2)
     )
 

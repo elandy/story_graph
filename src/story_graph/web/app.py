@@ -49,7 +49,7 @@ def create_app(jobs_root: Path | None = None, retention_days: int = DEFAULT_RETE
     return app
 
 async def index_page(_request: Request) -> HTMLResponse:
-    return HTMLResponse(render_index_page())
+    return HTMLResponse(render_index_page(show_api_key_field=not _server_api_key_configured()))
 
 
 async def list_jobs(request: Request) -> JSONResponse:
@@ -78,8 +78,11 @@ async def create_job(request: Request) -> JSONResponse:
         "on",
         "yes",
     }
+    provider_api_key = None if _server_api_key_configured() else str(form.get("api_key", "")).strip()
 
     try:
+        if not _server_api_key_configured() and not provider_api_key:
+            raise ValueError("An API key is required.")
         max_chunks = _parse_max_chunks(form.get("max_chunks"))
         max_chunk_tokens = _parse_non_negative_int(
             form.get("max_chunk_tokens"),
@@ -104,6 +107,7 @@ async def create_job(request: Request) -> JSONResponse:
         status = request.app.state.job_manager.create_job(
             upload_name=filename,
             file_bytes=raw_bytes,
+            provider_api_key=provider_api_key,
             apply_nlp_filter=apply_nlp_filter,
             max_chunks=max_chunks,
             max_chunk_tokens=max_chunk_tokens,
@@ -225,6 +229,10 @@ def _parse_positive_int(raw_value, *, field_name: str, default: int) -> int:
     if value <= 0:
         raise ValueError(f"{field_name} must be a positive integer.")
     return value
+
+
+def _server_api_key_configured() -> bool:
+    return bool(os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"))
 
 
 app = create_app()

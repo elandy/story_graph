@@ -138,6 +138,7 @@ input[type="file"] {
   background: rgba(255, 255, 255, 0.9);
 }
 
+.field input[type="password"],
 .field input[type="search"],
 .field select {
   width: 100%;

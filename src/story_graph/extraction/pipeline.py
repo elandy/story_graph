@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -142,6 +143,7 @@ async def process_chunks(
     retry_backoff_max_seconds: float = 60.0,
     batch_size: int = 4,
     max_batch_tokens: int = 9000,
+    provider_api_key: str | None = None,
     extractor: Callable[..., Awaitable[ExtractionResult]] | None = None,
     batch_extractor: Callable[[list[str]], Awaitable[list[ExtractionResult]]] | None = None,
     now_fn: Callable[[], float] | None = None,
@@ -286,10 +288,18 @@ async def process_chunks(
             )
             try:
                 if len(batch_chunks) == 1:
-                    batch_results = [await extractor_fn(text=batch_chunks[0]["text"])]
+                    batch_results = [
+                        await _invoke_single_extractor(
+                            extractor_fn,
+                            text=batch_chunks[0]["text"],
+                            provider_api_key=provider_api_key,
+                        )
+                    ]
                 else:
-                    batch_results = await batch_extractor_fn(
-                        [chunk["text"] for chunk in batch_chunks]
+                    batch_results = await _invoke_batch_extractor(
+                        batch_extractor_fn,
+                        texts=[chunk["text"] for chunk in batch_chunks],
+                        provider_api_key=provider_api_key,
                     )
                 _validate_batch_results(batch_results, len(batch_chunks))
                 break
@@ -371,6 +381,37 @@ def _validate_batch_results(results: list[ExtractionResult], expected_count: int
         raise ValueError(
             f"Expected {expected_count} extraction result(s) from the batch, got {len(results)}."
         )
+
+
+async def _invoke_single_extractor(
+    extractor_fn: Callable[..., Awaitable[ExtractionResult]],
+    *,
+    text: str,
+    provider_api_key: str | None,
+) -> ExtractionResult:
+    if provider_api_key and _callable_accepts_parameter(extractor_fn, "api_key"):
+        return await extractor_fn(text=text, api_key=provider_api_key)
+    return await extractor_fn(text=text)
+
+
+async def _invoke_batch_extractor(
+    batch_extractor_fn: Callable[[list[str]], Awaitable[list[ExtractionResult]]] | Callable[..., Awaitable[list[ExtractionResult]]],
+    *,
+    texts: list[str],
+    provider_api_key: str | None,
+) -> list[ExtractionResult]:
+    if provider_api_key and _callable_accepts_parameter(batch_extractor_fn, "api_key"):
+        return await batch_extractor_fn(texts=texts, api_key=provider_api_key)
+    return await batch_extractor_fn(texts)
+
+
+def _callable_accepts_parameter(fn: Callable[..., object], parameter_name: str) -> bool:
+    try:
+        signature = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return False
+
+    return parameter_name in signature.parameters
 
 
 def _select_batch_chunks(

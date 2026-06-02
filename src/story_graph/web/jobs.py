@@ -64,6 +64,7 @@ class JobManager:
         self,
         upload_name: str,
         file_bytes: bytes,
+        provider_api_key: str | None = None,
         apply_nlp_filter: bool = False,
         max_chunks: int = 0,
         max_chunk_tokens: int = 3000,
@@ -110,6 +111,8 @@ class JobManager:
         )
 
         self._input_path(job_id).write_text(text, encoding="utf-8")
+        if provider_api_key:
+            self._api_key_path(job_id).write_text(provider_api_key, encoding="utf-8")
         self._write_status(status)
         self._queue.put(job_id)
         return status
@@ -240,6 +243,7 @@ class JobManager:
         )
 
         input_path = self._input_path(job_id)
+        provider_api_key = self._read_provider_api_key(job_id)
         checkpoint_path = self._workspace(job_id) / status.artifacts.checkpoint_file
         graph_path = self._workspace(job_id) / status.artifacts.graph_file
         debug_json_path = self._workspace(job_id) / status.artifacts.debug_relationships_file
@@ -284,6 +288,7 @@ class JobManager:
                         max_paragraphs_per_chunk=status.max_paragraphs_per_chunk,
                         batch_size=status.batch_size,
                         max_batch_tokens=status.max_batch_tokens,
+                        provider_api_key=provider_api_key,
                         debug_json=True,
                         checkpoint_path=checkpoint_path,
                         reset_checkpoint=False,
@@ -389,6 +394,9 @@ class JobManager:
     def _input_path(self, job_id: str) -> Path:
         return self._workspace(job_id) / "input.txt"
 
+    def _api_key_path(self, job_id: str) -> Path:
+        return self._workspace(job_id) / ".provider_api_key"
+
     def _should_pause(self, job_id: str) -> bool:
         try:
             return self.get_status(job_id).pause_requested
@@ -415,6 +423,14 @@ class JobManager:
             workspace = self._workspace(status.job_id)
             if workspace.exists():
                 shutil.rmtree(workspace, ignore_errors=True)
+
+    def _read_provider_api_key(self, job_id: str) -> str | None:
+        api_key_path = self._api_key_path(job_id)
+        if not api_key_path.exists():
+            return None
+
+        value = api_key_path.read_text(encoding="utf-8").strip()
+        return value or None
 
 
 def _utc_now() -> datetime:
