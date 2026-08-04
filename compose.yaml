@@ -1,15 +1,35 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: story-graph-postgres
+    environment:
+      POSTGRES_DB: story_graph
+      POSTGRES_USER: story_graph
+      POSTGRES_PASSWORD: story_graph
+    ports:
+      - "5432:5432"
+    volumes:
+      - story_graph_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U story_graph -d story_graph"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   story-graph:
     build: .
     container_name: story-graph
-
     env_file:
       - .env
-
+    environment:
+      DATABASE_URL: postgresql+psycopg://story_graph:story_graph@postgres:5432/story_graph
     ports:
       - "8000:8000"
-
-    volumes:
-      - ./data:/app/data
-
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  story_graph_postgres_data:

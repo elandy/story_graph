@@ -60,7 +60,7 @@ async def index_page(request: Request) -> HTMLResponse:
 
 async def list_jobs(request: Request) -> JSONResponse:
     session_id = get_or_create_session_id(request)
-    statuses = (request.app.state.job_manager .list_statuses_for_session(session_id))
+    statuses = request.app.state.job_manager.list_statuses_for_session(session_id)
     return JSONResponse({"jobs": [_serialize_status(status) for status in statuses]})
 
 
@@ -216,11 +216,11 @@ async def get_job_graph(request: Request):
     if status.state != JobState.completed:
         return JSONResponse({"error": "Graph output is not ready yet."}, status_code=409)
 
-    graph_path = manager.graph_path(job_id)
-    if not graph_path.exists():
-        return JSONResponse({"error": "Graph output file is missing."}, status_code=404)
+    graph_bytes = manager.graph_bytes(job_id)
+    if graph_bytes is None:
+        return JSONResponse({"error": "Graph output artifact is missing."}, status_code=404)
 
-    return FileResponse(graph_path, media_type="text/html")
+    return Response(graph_bytes, media_type="text/html; charset=utf-8")
 
 
 def _serialize_status(status: JobStatus) -> dict:

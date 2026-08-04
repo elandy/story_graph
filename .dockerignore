@@ -1,9 +1,10 @@
-.venv
-.idea
 .git
+.idea
+.venv
 __pycache__
-.pytest_cache
-tests
-data/jobs
-data/checkpoints
 *.pyc
+.pytest_cache
+data
+*.html
+debug_relationships.json
+story_graph.egg-info
