@@ -284,7 +284,7 @@ class JobManager:
             input_path = workspace / status.artifacts.input_file
             checkpoint_path = workspace / status.artifacts.checkpoint_file
             graph_path = workspace / status.artifacts.graph_file
-            debug_json_path = workspace / status.artifacts.debug_relationships_file
+            # debug_json_path = workspace / status.artifacts.debug_relationships_file
 
             input_bytes = self.get_artifact_bytes(job_id, status.artifacts.input_file)
             if input_bytes is None:
@@ -357,11 +357,11 @@ class JobManager:
                             batch_size=status.batch_size,
                             max_batch_tokens=status.max_batch_tokens,
                             provider_api_key=provider_api_key,
-                            debug_json=True,
+                            # debug_json=True,
                             checkpoint_path=checkpoint_path,
                             reset_checkpoint=False,
                             output_html_path=graph_path,
-                            debug_json_path=debug_json_path,
+                            # debug_json_path=debug_json_path,
                             confirm_extraction=lambda _remaining: True,
                             should_pause=lambda: self._should_pause(job_id),
                             progress_callback=progress_callback,
@@ -408,13 +408,13 @@ class JobManager:
                     status.artifacts.graph_file,
                     content_type="text/html; charset=utf-8",
                 )
-            if debug_json_path.exists():
-                self._save_file_artifact(
-                    job_id,
-                    debug_json_path,
-                    status.artifacts.debug_relationships_file,
-                    content_type="application/json",
-                )
+            # if debug_json_path.exists():
+            #     self._save_file_artifact(
+            #         job_id,
+            #         debug_json_path,
+            #         status.artifacts.debug_relationships_file,
+            #         content_type="application/json",
+            #     )
 
             self._update_status(
                 job_id,

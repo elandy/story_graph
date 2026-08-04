@@ -31,4 +31,4 @@ ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["python", "-m", "story_graph.web"]
+CMD ["uvicorn", "story_graph.web.app:app", "--host", "0.0.0.0", "--port", "8000"]

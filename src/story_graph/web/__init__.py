@@ -1,4 +1,4 @@
-from story_graph.web.app import app, create_app
+from story_graph.web.app import app
 
 
-__all__ = ["app", "create_app"]
+__all__ = ["app"]

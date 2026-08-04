@@ -2,14 +2,17 @@ from contextlib import asynccontextmanager
 import os
 from pathlib import Path
 
-from starlette.applications import Starlette
-from starlette.datastructures import UploadFile
-from starlette.requests import Request
-from starlette.responses import FileResponse, HTMLResponse, JSONResponse, Response
-from starlette.routing import Route
-from starlette.staticfiles import StaticFiles
+from fastapi import FastAPI, File, Form, Request, Response, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from story_graph.web.jobs import JobDeleteError, JobManager, JobNotFoundError, JobPauseError, JobRetryError
+from story_graph.web.jobs import (
+    JobDeleteError,
+    JobManager,
+    JobNotFoundError,
+    JobPauseError,
+    JobRetryError,
+)
 from story_graph.web.models import JobState, JobStatus
 from story_graph.web.session import get_or_create_session_id
 from story_graph.web.ui import STATIC_DIR, render_index_page
@@ -20,36 +23,32 @@ DEFAULT_JOBS_ROOT = PROJECT_ROOT / "data" / "jobs"
 DEFAULT_RETENTION_DAYS = int(os.getenv("STORY_GRAPH_JOB_RETENTION_DAYS", "30"))
 
 
-def create_app(jobs_root: Path | None = None, retention_days: int = DEFAULT_RETENTION_DAYS) -> Starlette:
-    manager = JobManager(jobs_root or DEFAULT_JOBS_ROOT, retention_days=retention_days)
+manager = JobManager(
+    DEFAULT_JOBS_ROOT,
+    retention_days=DEFAULT_RETENTION_DAYS,
+)
 
-    @asynccontextmanager
-    async def lifespan(app: Starlette):
-        manager.start()
-        app.state.job_manager = manager
-        try:
-            yield
-        finally:
-            manager.stop()
 
-    app = Starlette(
-        debug=False,
-        lifespan=lifespan,
-        routes=[
-            Route("/", endpoint=index_page),
-            Route("/jobs", endpoint=list_jobs, methods=["GET"]),
-            Route("/jobs", endpoint=create_job, methods=["POST"]),
-            Route("/jobs/{job_id:str}", endpoint=get_job_status, methods=["GET"]),
-            Route("/jobs/{job_id:str}", endpoint=delete_job, methods=["DELETE"]),
-            Route("/jobs/{job_id:str}/pause", endpoint=pause_job, methods=["POST"]),
-            Route("/jobs/{job_id:str}/retry", endpoint=retry_job, methods=["POST"]),
-            Route("/jobs/{job_id:str}/graph", endpoint=get_job_graph, methods=["GET"]),
-        ],
-    )
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-    return app
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    manager.start()
+    app.state.job_manager = manager
+    try:
+        yield
+    finally:
+        manager.stop()
 
-async def index_page(request: Request) -> HTMLResponse:
+
+app = FastAPI(
+    debug=False,
+    lifespan=lifespan,
+)
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index_page(request: Request):
     response = HTMLResponse(
         render_index_page(
             show_api_key_field=not _server_api_key_configured()
@@ -58,59 +57,52 @@ async def index_page(request: Request) -> HTMLResponse:
     get_or_create_session_id(request, response)
     return response
 
-async def list_jobs(request: Request) -> JSONResponse:
+
+@app.get("/jobs")
+async def list_jobs(request: Request):
     session_id = get_or_create_session_id(request)
     statuses = request.app.state.job_manager.list_statuses_for_session(session_id)
-    return JSONResponse({"jobs": [_serialize_status(status) for status in statuses]})
+    return {"jobs": [_serialize_status(s) for s in statuses]}
 
 
-async def create_job(request: Request) -> JSONResponse:
-    form = await request.form()
-    upload = form.get("file")
-    if not isinstance(upload, UploadFile):
-        return JSONResponse({"error": "A .txt file upload is required."}, status_code=400)
+@app.post("/jobs", status_code=202)
+async def create_job(
+    request: Request,
+    file: UploadFile = File(...),
+    apply_nlp_filter: bool = Form(False),
+    api_key: str = Form(""),
+    max_chunks: str | None = Form(None),
+    max_chunk_tokens: str | None = Form(None),
+    max_paragraphs_per_chunk: str | None = Form(None),
+    batch_size: str | None = Form(None),
+    max_batch_tokens: str | None = Form(None),
+):
+    filename = Path(file.filename or "").name
 
-    filename = Path(upload.filename or "").name
     if not filename.lower().endswith(".txt"):
-        return JSONResponse({"error": "Only .txt uploads are supported."}, status_code=400)
+        return JSONResponse(
+            {"error": "Only .txt uploads are supported."},
+            status_code=400,
+        )
 
-    raw_bytes = await upload.read()
-    await upload.close()
+    raw_bytes = await file.read()
+
     if not raw_bytes:
-        return JSONResponse({"error": "The uploaded file is empty."}, status_code=400)
+        return JSONResponse(
+            {"error": "The uploaded file is empty."},
+            status_code=400,
+        )
 
-    apply_nlp_filter = str(form.get("apply_nlp_filter", "")).lower() in {
-        "1",
-        "true",
-        "on",
-        "yes",
-    }
-    provider_api_key = None if _server_api_key_configured() else str(form.get("api_key", "")).strip()
+    provider_api_key = (
+        None
+        if _server_api_key_configured()
+        else api_key.strip()
+    )
 
     try:
         if not _server_api_key_configured() and not provider_api_key:
             raise ValueError("An API key is required.")
-        max_chunks = _parse_max_chunks(form.get("max_chunks"))
-        max_chunk_tokens = _parse_non_negative_int(
-            form.get("max_chunk_tokens"),
-            field_name="max_chunk_tokens",
-            default=3000,
-        )
-        max_paragraphs_per_chunk = _parse_non_negative_int(
-            form.get("max_paragraphs_per_chunk"),
-            field_name="max_paragraphs_per_chunk",
-            default=80,
-        )
-        batch_size = _parse_positive_int(
-            form.get("batch_size"),
-            field_name="batch_size",
-            default=4,
-        )
-        max_batch_tokens = _parse_positive_int(
-            form.get("max_batch_tokens"),
-            field_name="max_batch_tokens",
-            default=9000,
-        )
+
         session_id = get_or_create_session_id(request)
 
         status = request.app.state.job_manager.create_job(
@@ -119,80 +111,109 @@ async def create_job(request: Request) -> JSONResponse:
             file_bytes=raw_bytes,
             provider_api_key=provider_api_key,
             apply_nlp_filter=apply_nlp_filter,
-            max_chunks=max_chunks,
-            max_chunk_tokens=max_chunk_tokens,
-            max_paragraphs_per_chunk=max_paragraphs_per_chunk,
-            batch_size=batch_size,
-            max_batch_tokens=max_batch_tokens,
+            max_chunks=_parse_max_chunks(max_chunks),
+            max_chunk_tokens=_parse_non_negative_int(
+                max_chunk_tokens,
+                field_name="max_chunk_tokens",
+                default=3000,
+            ),
+            max_paragraphs_per_chunk=_parse_non_negative_int(
+                max_paragraphs_per_chunk,
+                field_name="max_paragraphs_per_chunk",
+                default=80,
+            ),
+            batch_size=_parse_positive_int(
+                batch_size,
+                field_name="batch_size",
+                default=4,
+            ),
+            max_batch_tokens=_parse_positive_int(
+                max_batch_tokens,
+                field_name="max_batch_tokens",
+                default=9000,
+            ),
         )
+
     except UnicodeDecodeError:
         return JSONResponse(
             {"error": "Only UTF-8 encoded .txt uploads are supported."},
             status_code=400,
         )
     except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            {"error": str(exc)},
+            status_code=400,
+        )
 
-    return JSONResponse(_serialize_status(status), status_code=202)
+    return _serialize_status(status)
 
 
-async def get_job_status(request: Request) -> JSONResponse:
-    job_id = request.path_params["job_id"]
+@app.get("/jobs/{job_id}")
+async def get_job_status(job_id: str, request: Request):
     try:
         session_id = get_or_create_session_id(request)
-        status = (
-            request.app.state.job_manager
-            .get_status_for_session(job_id, session_id)
+        status = request.app.state.job_manager.get_status_for_session(
+            job_id,
+            session_id,
         )
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
 
-    return JSONResponse(_serialize_status(status))
+    return _serialize_status(status)
 
 
-async def retry_job(request: Request) -> JSONResponse:
-    job_id = request.path_params["job_id"]
+@app.post("/jobs/{job_id}/retry", status_code=202)
+async def retry_job(job_id: str, request: Request):
     try:
         session_id = get_or_create_session_id(request)
+
         request.app.state.job_manager.get_status_for_session(
             job_id,
             session_id,
         )
+
         status = request.app.state.job_manager.retry_job(job_id)
+
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
     except JobRetryError as exc:
         return JSONResponse({"error": str(exc)}, status_code=409)
 
-    return JSONResponse(_serialize_status(status), status_code=202)
+    return _serialize_status(status)
 
 
-async def pause_job(request: Request) -> JSONResponse:
-    job_id = request.path_params["job_id"]
+@app.post("/jobs/{job_id}/pause", status_code=202)
+async def pause_job(job_id: str, request: Request):
     try:
         session_id = get_or_create_session_id(request)
+
         request.app.state.job_manager.get_status_for_session(
             job_id,
             session_id,
         )
+
         status = request.app.state.job_manager.pause_job(job_id)
+
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
     except JobPauseError as exc:
         return JSONResponse({"error": str(exc)}, status_code=409)
 
-    return JSONResponse(_serialize_status(status), status_code=202)
+    return _serialize_status(status)
 
 
-async def delete_job(request: Request) -> Response:
-    job_id = request.path_params["job_id"]
+@app.delete("/jobs/{job_id}", status_code=204)
+async def delete_job(job_id: str, request: Request):
     try:
         session_id = get_or_create_session_id(request)
+
         request.app.state.job_manager.get_status_for_session(
             job_id,
             session_id,
         )
+
         request.app.state.job_manager.delete_job(job_id)
+
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
     except JobDeleteError as exc:
@@ -201,26 +222,39 @@ async def delete_job(request: Request) -> Response:
     return Response(status_code=204)
 
 
-async def get_job_graph(request: Request):
-    job_id = request.path_params["job_id"]
+@app.get("/jobs/{job_id}/graph")
+async def get_job_graph(job_id: str, request: Request):
     manager: JobManager = request.app.state.job_manager
+
     try:
         session_id = get_or_create_session_id(request)
+
         status = manager.get_status_for_session(
             job_id,
             session_id,
         )
+
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
 
     if status.state != JobState.completed:
-        return JSONResponse({"error": "Graph output is not ready yet."}, status_code=409)
+        return JSONResponse(
+            {"error": "Graph output is not ready yet."},
+            status_code=409,
+        )
 
     graph_bytes = manager.graph_bytes(job_id)
-    if graph_bytes is None:
-        return JSONResponse({"error": "Graph output artifact is missing."}, status_code=404)
 
-    return Response(graph_bytes, media_type="text/html; charset=utf-8")
+    if graph_bytes is None:
+        return JSONResponse(
+            {"error": "Graph output artifact is missing."},
+            status_code=404,
+        )
+
+    return Response(
+        graph_bytes,
+        media_type="text/html; charset=utf-8",
+    )
 
 
 def _serialize_status(status: JobStatus) -> dict:
@@ -231,11 +265,13 @@ def _serialize_status(status: JobStatus) -> dict:
             "workspace",
         },
     )
+
     payload["graph_url"] = (
         f"/jobs/{status.job_id}/graph"
         if status.state == JobState.completed
         else None
     )
+
     return payload
 
 
@@ -244,8 +280,10 @@ def _parse_max_chunks(raw_value) -> int:
         return 0
 
     value = int(raw_value)
+
     if value < 0:
         raise ValueError("max_chunks must be zero or a positive integer.")
+
     return value
 
 
@@ -254,8 +292,10 @@ def _parse_non_negative_int(raw_value, *, field_name: str, default: int = 0) -> 
         return default
 
     value = int(raw_value)
+
     if value < 0:
         raise ValueError(f"{field_name} must be zero or a positive integer.")
+
     return value
 
 
@@ -264,13 +304,15 @@ def _parse_positive_int(raw_value, *, field_name: str, default: int) -> int:
         return default
 
     value = int(raw_value)
+
     if value <= 0:
         raise ValueError(f"{field_name} must be a positive integer.")
+
     return value
 
 
 def _server_api_key_configured() -> bool:
-    return bool(os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"))
-
-
-app = create_app()
+    return bool(
+        os.getenv("GOOGLE_API_KEY")
+        or os.getenv("GEMINI_API_KEY")
+    )
