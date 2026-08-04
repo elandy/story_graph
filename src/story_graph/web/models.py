@@ -22,6 +22,8 @@ class JobArtifacts(BaseModel):
 
 class JobStatus(BaseModel):
     job_id: str
+    session_id: str
+
     state: JobState
     stage: str
     message: str

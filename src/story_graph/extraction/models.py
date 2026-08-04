@@ -65,7 +65,9 @@ class RelationshipType(str, Enum):
     employee = "employee"
     commander = "commander"
     soldier = "soldier"
-
+    owner = "owner"
+    subject = "subject"
+    
     # protection / service
     protector = "protector"
     bodyguard = "bodyguard"

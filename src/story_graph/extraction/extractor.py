@@ -1,17 +1,11 @@
 import json
 
-from dotenv import load_dotenv
-from pydantic_ai import Agent
-from pydantic_ai.models.google import GoogleModel
-from pydantic_ai.providers.google import GoogleProvider
+from langchain_core.prompts import ChatPromptTemplate
 
 from .models import BatchExtractionResult, ExtractionResult
+from .model_factory import _get_chat_llm
 
-
-load_dotenv()
-
-
-MODEL_NAME = "gemini-3.1-flash-lite"
+# Keep your extraction rules text so the model gets the same instructions.
 EXTRACTION_RULES = (
     "Rules:\n"
     "- Include relationships that are explicitly stated or clearly implied by the text.\n"
@@ -32,87 +26,73 @@ EXTRACTION_RULES = (
     "- Leave position and end_position null; the pipeline will fill temporal positions."
 )
 
-
-def _build_relationship_agent(*, api_key: str | None = None) -> Agent:
-    if api_key:
-        model = GoogleModel(
-            MODEL_NAME,
-            provider=GoogleProvider(api_key=api_key),
-        )
-    else:
-        model = f"google-gla:{MODEL_NAME}"
-
-    return Agent(
-        model,
-        output_type=ExtractionResult,
-        system_prompt=(
-            "Extract characters, relationships, and sentiments from the text.\n"
-            f"{EXTRACTION_RULES}"
-        ),
-    )
-
-
-def _build_batch_relationship_agent(*, api_key: str | None = None) -> Agent:
-    if api_key:
-        model = GoogleModel(
-            MODEL_NAME,
-            provider=GoogleProvider(api_key=api_key),
-        )
-    else:
-        model = f"google-gla:{MODEL_NAME}"
-
-    return Agent(
-        model,
-        output_type=BatchExtractionResult,
-        system_prompt=(
-            "Extract characters, relationships, and sentiments for each chunk in the JSON payload.\n"
-            "Return one item for every chunk.\n"
-            "- Each item must preserve its input chunk_index.\n"
-            "- Treat each chunk independently.\n"
-            "- If a chunk has no findings, return empty lists for that chunk.\n"
-            f"{EXTRACTION_RULES}"
-        ),
-    )
-
-
 async def extract_relationships(text: str, api_key: str | None = None) -> ExtractionResult:
-    agent = _build_relationship_agent(api_key=api_key)
-    result = await agent.run(text)
-    return result.output
+    """
+    Extract relationships for a single text chunk and return an ExtractionResult instance.
+    """
+    model = _get_chat_llm(provider="google", api_key=api_key)
+    structured_model = model.with_structured_output(ExtractionResult)
+    template = (
+        "You are given a fragment of book text. Extract characters, relationships, "
+        "and sentiments from the text according to the rules below.\n\n"
+        f"{EXTRACTION_RULES}\n\n"
+        "Text:\n"
+        "{text}\n"
+    )
+    prompt = ChatPromptTemplate.from_template(template)
+    chain = prompt | structured_model
+
+    return await chain.ainvoke({"text": text})
 
 
-async def extract_relationships_batch(
-    texts: list[str],
-    api_key: str | None = None,
-) -> list[ExtractionResult]:
-    if not texts:
-        return []
-
-    if len(texts) == 1:
-        return [await extract_relationships(texts[0], api_key=api_key)]
+async def extract_relationships_batch(texts: list[str],api_key: str | None = None) -> list[ExtractionResult]:
+    """
+    Extract relationships for multiple chunks in a single LLM call.
+    Returns one ExtractionResult for each input chunk in the same order.
+    """
+    if not texts: return []
+    if len(texts) == 1: return [await extract_relationships(texts[0], api_key=api_key)]
 
     payload = {
         "chunks": [
             {
-                "chunk_index": chunk_index,
+                "chunk_index": i,
                 "text": text,
             }
-            for chunk_index, text in enumerate(texts)
+            for i, text in enumerate(texts)
         ]
     }
-    agent = _build_batch_relationship_agent(api_key=api_key)
-    result = await agent.run(
-        json.dumps(payload, ensure_ascii=False, indent=2)
+    payload_json = json.dumps(payload, ensure_ascii=False)
+    model = _get_chat_llm(provider="google", api_key=api_key)
+
+    structured_model = model.with_structured_output(BatchExtractionResult)
+    print(model.__class__)
+    print(structured_model.__class__)
+    template = (
+        "You are given a JSON payload containing multiple independent text chunks.\n"
+        "Process each chunk independently.\n\n"
+        f"{EXTRACTION_RULES}\n\n"
+        "Payload:\n"
+        "{payload}\n"
     )
 
-    expected_indices = set(range(len(texts)))
-    items_by_index = {}
-    for item in result.output.items:
-        if item.chunk_index in items_by_index:
-            raise ValueError(f"Duplicate chunk_index in batch response: {item.chunk_index}")
-        items_by_index[item.chunk_index] = item.result
+    prompt = ChatPromptTemplate.from_template(template)
 
-    if set(items_by_index) != expected_indices:
-        raise ValueError("Batch extraction response did not return exactly one result per chunk.")
+    chain = prompt | structured_model
+    print(len(payload_json))
+    print(sum(len(t) for t in texts))
+    parsed_batch = await chain.ainvoke(
+        {"payload": payload_json}
+    )
+    results = [None] * len(texts)
 
-    return [items_by_index[index] for index in range(len(texts))]
+    for item in parsed_batch.items:
+        if not (0 <= item.chunk_index < len(texts)):
+            raise ValueError(f"Invalid chunk_index {item.chunk_index}")
+
+        results[item.chunk_index] = item.result
+
+    if any(r is None for r in results):
+        raise ValueError("Model did not return one result for every chunk.")
+
+    return results

@@ -11,6 +11,7 @@ from starlette.staticfiles import StaticFiles
 
 from story_graph.web.jobs import JobDeleteError, JobManager, JobNotFoundError, JobPauseError, JobRetryError
 from story_graph.web.models import JobState, JobStatus
+from story_graph.web.session import get_or_create_session_id
 from story_graph.web.ui import STATIC_DIR, render_index_page
 
 
@@ -48,12 +49,18 @@ def create_app(jobs_root: Path | None = None, retention_days: int = DEFAULT_RETE
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app
 
-async def index_page(_request: Request) -> HTMLResponse:
-    return HTMLResponse(render_index_page(show_api_key_field=not _server_api_key_configured()))
-
+async def index_page(request: Request) -> HTMLResponse:
+    response = HTMLResponse(
+        render_index_page(
+            show_api_key_field=not _server_api_key_configured()
+        )
+    )
+    get_or_create_session_id(request, response)
+    return response
 
 async def list_jobs(request: Request) -> JSONResponse:
-    statuses = request.app.state.job_manager.list_statuses()
+    session_id = get_or_create_session_id(request)
+    statuses = (request.app.state.job_manager .list_statuses_for_session(session_id))
     return JSONResponse({"jobs": [_serialize_status(status) for status in statuses]})
 
 
@@ -104,7 +111,10 @@ async def create_job(request: Request) -> JSONResponse:
             field_name="max_batch_tokens",
             default=9000,
         )
+        session_id = get_or_create_session_id(request)
+
         status = request.app.state.job_manager.create_job(
+            session_id=session_id,
             upload_name=filename,
             file_bytes=raw_bytes,
             provider_api_key=provider_api_key,
@@ -129,7 +139,11 @@ async def create_job(request: Request) -> JSONResponse:
 async def get_job_status(request: Request) -> JSONResponse:
     job_id = request.path_params["job_id"]
     try:
-        status = request.app.state.job_manager.get_status(job_id)
+        session_id = get_or_create_session_id(request)
+        status = (
+            request.app.state.job_manager
+            .get_status_for_session(job_id, session_id)
+        )
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
 
@@ -139,6 +153,11 @@ async def get_job_status(request: Request) -> JSONResponse:
 async def retry_job(request: Request) -> JSONResponse:
     job_id = request.path_params["job_id"]
     try:
+        session_id = get_or_create_session_id(request)
+        request.app.state.job_manager.get_status_for_session(
+            job_id,
+            session_id,
+        )
         status = request.app.state.job_manager.retry_job(job_id)
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
@@ -151,6 +170,11 @@ async def retry_job(request: Request) -> JSONResponse:
 async def pause_job(request: Request) -> JSONResponse:
     job_id = request.path_params["job_id"]
     try:
+        session_id = get_or_create_session_id(request)
+        request.app.state.job_manager.get_status_for_session(
+            job_id,
+            session_id,
+        )
         status = request.app.state.job_manager.pause_job(job_id)
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
@@ -163,6 +187,11 @@ async def pause_job(request: Request) -> JSONResponse:
 async def delete_job(request: Request) -> Response:
     job_id = request.path_params["job_id"]
     try:
+        session_id = get_or_create_session_id(request)
+        request.app.state.job_manager.get_status_for_session(
+            job_id,
+            session_id,
+        )
         request.app.state.job_manager.delete_job(job_id)
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
@@ -175,9 +204,12 @@ async def delete_job(request: Request) -> Response:
 async def get_job_graph(request: Request):
     job_id = request.path_params["job_id"]
     manager: JobManager = request.app.state.job_manager
-
     try:
-        status = manager.get_status(job_id)
+        session_id = get_or_create_session_id(request)
+        status = manager.get_status_for_session(
+            job_id,
+            session_id,
+        )
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
 
@@ -192,7 +224,13 @@ async def get_job_graph(request: Request):
 
 
 def _serialize_status(status: JobStatus) -> dict:
-    payload = status.model_dump(mode="json")
+    payload = status.model_dump(
+        mode="json",
+        exclude={
+            "session_id",
+            "workspace",
+        },
+    )
     payload["graph_url"] = (
         f"/jobs/{status.job_id}/graph"
         if status.state == JobState.completed

@@ -1,27 +1,18 @@
 import re
-from math import ceil
-
-
-TOKEN_RE = re.compile(r"\w+|[^\w\s]", re.UNICODE)
+import tiktoken
 
 
 def split_paragraphs(text: str) -> list[str]:
     paragraphs = re.split(r"\n\s*\n", text)
-
     # remove empty paragraphs
     paragraphs = [p.strip() for p in paragraphs if p.strip()]
-
     return paragraphs
 
+_encoder = tiktoken.encoding_for_model("gpt-4o")
 
 def estimate_text_tokens(text: str) -> int:
-    if not text.strip():
-        return 0
-
-    lexical_units = len(TOKEN_RE.findall(text))
-    character_units = ceil(len(text) / 4)
-    return max(1, lexical_units, character_units)
-
+    if not text: return 0
+    return len(_encoder.encode(text))
 
 def chunk_paragraphs(
     paragraphs: list[str],
@@ -37,8 +28,7 @@ def chunk_paragraphs(
         raise ValueError("overlap must be zero or a positive integer.")
 
     chunks = []
-    if not paragraphs:
-        return chunks
+    if not paragraphs: return chunks
 
     paragraph_tokens = [estimate_text_tokens(paragraph) for paragraph in paragraphs]
     index = 0

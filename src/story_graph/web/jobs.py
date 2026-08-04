@@ -64,6 +64,7 @@ class JobManager:
         self,
         upload_name: str,
         file_bytes: bytes,
+        session_id: str,
         provider_api_key: str | None = None,
         apply_nlp_filter: bool = False,
         max_chunks: int = 0,
@@ -95,6 +96,7 @@ class JobManager:
 
         status = JobStatus(
             job_id=job_id,
+            session_id=session_id,
             state=JobState.queued,
             stage="queued",
             message="Job queued.",
@@ -133,6 +135,9 @@ class JobManager:
                     continue
 
         return sorted(statuses, key=lambda status: status.updated_at, reverse=True)
+
+    def list_statuses_for_session(self, session_id: str) -> list[JobStatus]:
+        return [status for status in self.list_statuses() if status.session_id == session_id]
 
     def retry_job(self, job_id: str) -> JobStatus:
         with self._write_lock:
@@ -194,6 +199,13 @@ class JobManager:
             if not status_path.exists():
                 raise JobNotFoundError(job_id)
             return JobStatus.model_validate_json(status_path.read_text(encoding="utf-8"))
+
+    def get_status_for_session(self, job_id: str, session_id: str) -> JobStatus:
+        status = self.get_status(job_id)
+        if status.session_id != session_id:
+            raise JobNotFoundError(job_id)
+
+        return status
 
     def graph_path(self, job_id: str) -> Path:
         status = self.get_status(job_id)
