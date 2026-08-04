@@ -10,11 +10,11 @@
   <main class="shell">
     <section class="hero">
       <span class="eyebrow">Story Graph Studio</span>
-      <h1>Upload a plain-text story. Get the graph back in the browser.</h1>
+      <h1>Upload a book. Get the character relationship graph back in the browser.</h1>
       <p>
-        Each upload becomes an isolated job workspace with its own source file, checkpoint,
-        graph HTML, debug JSON, and status metadata. The UI polls chunk-by-chunk progress while
-        the backend keeps request handling free.
+        Upload TXT, PDF, DOCX, or EPUB files and generate an interactive story graph.
+        Jobs, checkpoints, artifacts, and status information are persisted in the database,
+        allowing processing to continue across application restarts.
       </p>
     </section>
 
@@ -23,9 +23,17 @@
         {{api_key_field}}
 
         <label class="dropzone" for="file-input">
-          <strong id="selected-file">Choose a UTF-8 .txt file</strong>
-          <span>The first pass reuses the existing generated HTML graph directly.</span>
-          <input id="file-input" name="file" type="file" accept=".txt,text/plain" required>
+          <strong id="selected-file">Choose a TXT, PDF, DOCX, or EPUB file</strong>
+          <span>
+            Documents are extracted automatically before chunking and relationship analysis.
+          </span>
+          <input
+            id="file-input"
+            name="file"
+            type="file"
+            accept=".txt,.pdf,.docx,.epub,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            required
+          >
         </label>
 
         <div class="options">
@@ -66,13 +74,17 @@
       <section class="history">
         <div class="history-head">
           <h2>Jobs</h2>
-          <button class="button-secondary button-small" id="refresh-jobs-button" type="button">Refresh</button>
+          <button class="button-secondary button-small" id="refresh-jobs-button" type="button">
+            Refresh
+          </button>
         </div>
+
         <div class="history-filters">
           <label class="field">
             <span>Search jobs</span>
             <input id="job-search-input" type="search" placeholder="Filter by file name or job id">
           </label>
+
           <label class="field">
             <span>State</span>
             <select id="job-state-filter">
@@ -85,6 +97,7 @@
             </select>
           </label>
         </div>
+
         <div class="job-list" id="job-list"></div>
       </section>
     </section>

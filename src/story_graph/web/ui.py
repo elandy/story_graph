@@ -13,7 +13,7 @@ def render_index_page(*, show_api_key_field: bool = False) -> str:
     if show_api_key_field:
         api_key_field = """
         <label class="field">
-          <span>API key</span>
+          <span>Gemini API key</span>
           <input name="api_key" type="password" autocomplete="off" placeholder="Paste your Google Gemini API key" required>
         </label>
 """

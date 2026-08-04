@@ -6,6 +6,7 @@ from fastapi import FastAPI, File, Form, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from story_graph.ingest.loader import SUPPORTED_EXTENSIONS
 from story_graph.web.jobs import (
     JobDeleteError,
     JobManager,
@@ -79,9 +80,16 @@ async def create_job(
 ):
     filename = Path(file.filename or "").name
 
-    if not filename.lower().endswith(".txt"):
+    suffix = Path(filename).suffix.lower()
+
+    if suffix not in SUPPORTED_EXTENSIONS:
         return JSONResponse(
-            {"error": "Only .txt uploads are supported."},
+            {
+                "error": (
+                    "Unsupported file type. "
+                    f"Supported formats: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
+                )
+            },
             status_code=400,
         )
 
@@ -135,10 +143,18 @@ async def create_job(
         )
 
     except UnicodeDecodeError:
-        return JSONResponse(
-            {"error": "Only UTF-8 encoded .txt uploads are supported."},
-            status_code=400,
-        )
+        suffix = Path(filename).suffix.lower()
+        if suffix not in SUPPORTED_EXTENSIONS:
+            return JSONResponse(
+                {
+                    "error": (
+                        "Unsupported file type. "
+                        f"Supported formats: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
+                    )
+                },
+                status_code=400,
+            )
+
     except ValueError as exc:
         return JSONResponse(
             {"error": str(exc)},
@@ -257,6 +273,43 @@ async def get_job_graph(job_id: str, request: Request):
     )
 
 
+@app.get("/jobs/{job_id}/graph/download")
+async def download_job_graph(request: Request, job_id: str):
+    manager = request.app.state.job_manager
+
+    try:
+        session_id = get_or_create_session_id(request)
+        status = manager.get_status_for_session(job_id, session_id)
+    except JobNotFoundError:
+        return JSONResponse(
+            {"error": "Job not found."},
+            status_code=404,
+        )
+
+    if status.state != JobState.completed:
+        return JSONResponse(
+            {"error": "Graph output is not ready yet."},
+            status_code=409,
+        )
+
+    graph_bytes = manager.graph_bytes(job_id)
+
+    if graph_bytes is None:
+        return JSONResponse(
+            {"error": "Graph output artifact is missing."},
+            status_code=404,
+        )
+
+    filename = Path(status.original_filename).stem + "_story_graph.html"
+
+    return Response(
+        graph_bytes,
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+
 def _serialize_status(status: JobStatus) -> dict:
     payload = status.model_dump(
         mode="json",
@@ -268,6 +321,12 @@ def _serialize_status(status: JobStatus) -> dict:
 
     payload["graph_url"] = (
         f"/jobs/{status.job_id}/graph"
+        if status.state == JobState.completed
+        else None
+    )
+
+    payload["graph_download_url"] = (
+        f"/jobs/{status.job_id}/graph/download"
         if status.state == JobState.completed
         else None
     )

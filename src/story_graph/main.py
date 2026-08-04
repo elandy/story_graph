@@ -9,7 +9,7 @@ from pathlib import Path
 def parse_args():
     parser = argparse.ArgumentParser(description="Story graph pipeline")
 
-    parser.add_argument("book", type=str, help="Path to the book file")
+    parser.add_argument("book", type=str, help="Path to the book file (txt, pdf, docx, epub)")
 
     parser.add_argument("--apply-nlp-filter", action="store_true",
                         help="Filter chunks using NLP character interaction")

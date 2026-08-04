@@ -10,7 +10,8 @@ from queue import Empty, Queue
 from sqlalchemy import delete, select
 
 from story_graph.extraction.pipeline import ExtractionPaused
-from story_graph.pipeline import StoryGraphRunConfig, run_story_graph_pipeline_from_file
+from story_graph.pipeline import StoryGraphRunConfig, run_story_graph_pipeline_from_file, \
+    run_story_graph_pipeline_from_upload
 from story_graph.progress import PipelineProgressUpdate
 from story_graph.web.compression import COMPRESSION_ALGORITHM, compress_bytes, decompress_bytes
 from story_graph.web.database import SessionLocal
@@ -90,8 +91,7 @@ class JobManager:
         if max_batch_tokens <= 0:
             raise ValueError("max_batch_tokens must be a positive integer.")
 
-        text = file_bytes.decode("utf-8")
-        if not text.strip():
+        if not file_bytes:
             raise ValueError("Uploaded file is empty.")
 
         job_id = uuid.uuid4().hex
@@ -281,12 +281,11 @@ class JobManager:
 
         with tempfile.TemporaryDirectory(prefix=f"story-graph-{job_id}-") as tmp_dir:
             workspace = Path(tmp_dir)
-            input_path = workspace / status.artifacts.input_file
             checkpoint_path = workspace / status.artifacts.checkpoint_file
             graph_path = workspace / status.artifacts.graph_file
             # debug_json_path = workspace / status.artifacts.debug_relationships_file
-
             input_bytes = self.get_artifact_bytes(job_id, status.artifacts.input_file)
+
             if input_bytes is None:
                 self._update_status(
                     job_id,
@@ -298,7 +297,6 @@ class JobManager:
                     traceback=None,
                 )
                 return
-            input_path.write_bytes(input_bytes)
 
             checkpoint_bytes = self.get_artifact_bytes(job_id, status.artifacts.checkpoint_file)
             if checkpoint_bytes is not None:
@@ -347,9 +345,10 @@ class JobManager:
 
             try:
                 result = asyncio.run(
-                    run_story_graph_pipeline_from_file(
-                        input_path,
-                        StoryGraphRunConfig(
+                    run_story_graph_pipeline_from_upload(
+                        filename=status.original_filename,
+                        file_bytes=input_bytes,
+                        config=StoryGraphRunConfig(
                             apply_nlp_filter=status.apply_nlp_filter,
                             max_chunks=status.max_chunks,
                             max_chunk_tokens=status.max_chunk_tokens,
@@ -357,11 +356,9 @@ class JobManager:
                             batch_size=status.batch_size,
                             max_batch_tokens=status.max_batch_tokens,
                             provider_api_key=provider_api_key,
-                            # debug_json=True,
                             checkpoint_path=checkpoint_path,
                             reset_checkpoint=False,
                             output_html_path=graph_path,
-                            # debug_json_path=debug_json_path,
                             confirm_extraction=lambda _remaining: True,
                             should_pause=lambda: self._should_pause(job_id),
                             progress_callback=progress_callback,

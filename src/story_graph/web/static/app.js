@@ -14,7 +14,9 @@ let allJobs = [];
 
 fileInput.addEventListener("change", () => {
   const file = fileInput.files && fileInput.files[0];
-  selectedFile.textContent = file ? file.name : "Choose a UTF-8 .txt file";
+  selectedFile.textContent = file
+  ? file.name
+  : "Choose a TXT, PDF, DOCX, or EPUB file";
 });
 
 refreshJobsButton.addEventListener("click", () => {
@@ -84,12 +86,12 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   if (!fileInput.files || !fileInput.files[0]) {
-    renderInlineMessage("Choose a .txt file first.");
+    renderInlineMessage("Choose a supported document file first.");
     return;
   }
 
   submitButton.disabled = true;
-  renderInlineMessage("Uploading file and creating job workspace.");
+  renderInlineMessage("Uploading document and creating job.");
 
   try {
     const response = await fetch("/jobs", {
@@ -209,6 +211,12 @@ function renderJobRow(job) {
   const openButton = job.state === "completed" && job.graph_url
     ? `<a href="${job.graph_url}" target="_blank"><button class="button-secondary button-small" type="button">Open</button></a>`
     : "";
+
+  const downloadButton = job.state === "completed" && job.graph_download_url
+    ? `<a href="${job.graph_download_url}">
+         <button class="button-secondary button-small" type="button">Download</button>
+       </a>`
+    : "";
   const resumeButton = ["failed", "paused"].includes(job.state)
     ? `<button class="button-secondary button-small" type="button" data-action="resume" data-job-id="${job.job_id}">Resume</button>`
     : "";
@@ -242,7 +250,7 @@ function renderJobRow(job) {
     <article class="${rowClasses}" data-job-row="${job.job_id}" tabindex="0">
       <div class="job-head">
         <div class="job-main">
-          <div class="job-title">${escapeHtml(job.original_filename || "upload.txt")}</div>
+          <div class="job-title">${escapeHtml(job.original_filename || "upload")}</div>
           <div class="job-meta">
             <span>Job ${escapeHtml(job.job_id || "")}</span>
             <span>${escapeHtml(progress)}</span>
@@ -256,7 +264,7 @@ function renderJobRow(job) {
         ${messageBlock}
         ${progressBlock}
       </div>
-      <div class="job-actions">${pauseButton}${resumeButton}${deleteButton}${openButton}</div>
+      <div class="job-actions">${pauseButton}${resumeButton}${deleteButton}${openButton}${downloadButton}</div>
     </article>
   `;
 }
@@ -336,7 +344,7 @@ async function pauseJob(jobId) {
 
 async function deleteJob(jobId) {
   try {
-    if (!window.confirm("Delete this job and all of its saved artifacts?")) {
+    if (!window.confirm("Delete this job and its stored artifacts?")) {
       return;
     }
 

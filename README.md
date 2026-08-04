@@ -1,20 +1,30 @@
 # Story Graph
 
-Extracts character relationships and sentiments from a book, aggregates them into a graph, and writes an interactive HTML visualization. The project now supports both the original CLI flow and a web app backed by the same shared pipeline core.
+Story Graph extracts character relationships and sentiments from a book, aggregates them into a graph, and produces an interactive HTML visualization.
 
-## Requirements
+The project supports two entry points:
 
-- Python 3.12+
-- Project dependencies installed
-- Environment variables loaded through `.env`
+* **CLI** for running the pipeline directly against a local text file.
+* **FastAPI web application** that executes the same pipeline asynchronously while persisting jobs and artifacts in PostgreSQL.
 
-If you use the local virtualenv in this repo, commands below assume:
+---
+
+# Requirements
+
+* Python 3.12+
+* PostgreSQL 17+
+* Docker & Docker Compose (recommended for the web application)
+* Environment variables loaded from `.env`
+
+If you use the local virtual environment:
 
 ```powershell
 .\.venv\Scripts\python.exe
 ```
 
-## Run The Pipeline
+---
+
+# Running the CLI Pipeline
 
 Basic run:
 
@@ -28,13 +38,13 @@ Process only the first 10 chunks:
 .\.venv\Scripts\python.exe -m story_graph.main data\blindsight.txt --max-chunks 10
 ```
 
-Run with the NLP pre-filter enabled:
+Enable the NLP pre-filter:
 
 ```powershell
 .\.venv\Scripts\python.exe -m story_graph.main data\blindsight.txt --apply-nlp-filter
 ```
 
-Useful optional flags:
+## Useful CLI Options
 
 - `--max-chunks 10`: limit the run to the first N chunks
 - `--apply-nlp-filter`: drop chunks with no detected character interaction before extraction
@@ -43,135 +53,166 @@ Useful optional flags:
 - `--checkpoint-file <path>`: explicitly choose the resume/checkpoint file
 - `--reset-checkpoint`: delete any existing checkpoint file before starting
 
-The script asks for confirmation before extraction starts:
+Before extraction begins, the CLI asks for confirmation:
 
 ```text
 Proceed with extraction for N remaining chunk(s)? (y/n):
 ```
 
-Type `y` to continue.
+---
 
-## Run The Web App
+# Running the Web Application
 
-Start the server:
+The recommended approach is Docker Compose:
 
-```powershell
-.\.venv\Scripts\python.exe -m story_graph.web
+```bash
+docker compose up --build
 ```
 
-Then open:
+This starts:
+
+* PostgreSQL
+* FastAPI
+* automatic database migrations via Alembic
+
+The application is then available at:
 
 ```text
-http://127.0.0.1:8000
+http://localhost:8000
 ```
 
-Current web scope:
-
-- upload UTF-8 `.txt` files only
-- process jobs in the background
-- poll progress and status in the browser
-- show past jobs from `data/jobs/`
-- resume failed jobs from their saved checkpoints
-- render the generated graph HTML directly in an embedded frame
-
-Each upload gets its own workspace under:
+On startup the container automatically executes:
 
 ```text
-data/jobs/<job-id>/
+alembic upgrade head
 ```
 
-Artifacts written per job:
+ensuring the database schema is up to date.
 
-- `input.txt`
-- `checkpoint.json`
-- `story_graph.html`
-- `debug_relationships.json`
-- `status.json`
+---
 
-## Outputs
+# Database Migrations
 
-The main output HTML is written to:
+This project uses Alembic for schema management.
+
+Generate a migration:
+
+```bash
+alembic revision --autogenerate -m "description"
+```
+
+Apply migrations:
+
+```bash
+alembic upgrade head
+```
+
+Show the current database revision:
+
+```bash
+alembic current
+```
+
+Rollback one revision:
+
+```bash
+alembic downgrade -1
+```
+
+---
+
+# Web Application
+
+The web application is implemented with **FastAPI**.
+
+Current functionality:
+
+* upload books in UTF-8 `.txt`, `.epub`, `.pdf` or `.docx` format 
+* background job processing
+* browser polling for progress
+* retry failed jobs
+* pause running jobs
+* delete jobs
+* render the generated graph directly in the browser
+
+Unlike earlier versions, the web application **does not rely on per-job filesystem state**.
+
+Job metadata, status, checkpoints and generated artifacts are persisted in PostgreSQL, allowing jobs to survive application restarts without depending on `data/jobs/`.
+
+---
+
+# Outputs
+
+## CLI
+
+The generated graph is written to:
 
 ```text
 story_graph.html
 ```
 
-If `--debug-json` is enabled, this file is also written:
+When `--debug-json` is enabled:
 
 ```text
 debug_relationships.json
 ```
 
-For the web app, equivalent outputs are written inside the per-job workspace in `data/jobs/<job-id>/`.
+## Web
 
-## Resume After Interruption Or Error
+The generated graph is stored as a database artifact and served directly by the API through the graph endpoint.
 
-The extraction stage is resumable. After each completed chunk, the pipeline saves a checkpoint file containing:
+---
 
-- the completed chunk index
-- the chunk fingerprint
-- the extracted structured result
+# Resume After Interruption
 
-If the process stops because of `Ctrl+C`, a terminal close, or an extraction error, rerun the command with the same book and checkpoint file. The pipeline reloads completed chunks and continues from the next unfinished chunk.
+The extraction engine is checkpointed.
 
-The web app uses the same checkpointed extraction core. If the server restarts, queued or running jobs are placed back in the queue and resume from the job workspace checkpoint.
+After every completed chunk it stores:
 
-Failed web jobs are not retried automatically. Open the web app, find the failed job in the Jobs list, and click `Resume`. The backend requeues the same job ID and continues from `data/jobs/<job-id>/checkpoint.json`.
+* completed chunk index
+* chunk fingerprint
+* extracted structured result
 
-### Example: stop after 5 chunks, resume to 10
+If the CLI process is interrupted (Ctrl+C, terminal close, crash), rerunning with the same checkpoint continues from the next unfinished chunk.
 
-Use a fixed checkpoint file so the test is explicit:
+The web application uses the same checkpointing mechanism internally. Running or queued jobs resume correctly after the application restarts.
+
+Failed jobs are **not** retried automatically. They can be retried through the web interface.
+
+---
+
+# Resume Example
+
+Choose an explicit checkpoint:
 
 ```powershell
 $ckpt = "data\checkpoints\blindsight.test.json"
 ```
 
-Start a clean run:
+Run:
 
 ```powershell
 .\.venv\Scripts\python.exe -m story_graph.main data\blindsight.txt --max-chunks 10 --checkpoint-file $ckpt --reset-checkpoint
 ```
 
-When prompted, type:
+Interrupt after several completed chunks.
 
-```text
-y
-```
-
-If you want to interrupt after chunk 5, wait until chunk 5 has finished saving and the program prints:
-
-```text
-Processing chunk 6/10
-```
-
-Then press `Ctrl+C`.
-
-Resume with the same checkpoint file:
+Resume:
 
 ```powershell
 .\.venv\Scripts\python.exe -m story_graph.main data\blindsight.txt --max-chunks 10 --checkpoint-file $ckpt
 ```
 
-When prompted, type:
+Expected behavior:
 
-```text
-y
-```
+* previously completed chunks are loaded
+* processing resumes at the first unfinished chunk
 
-Expected resume behavior:
+---
 
-- it prints `Loaded 5/10 chunks from checkpoint: ...`
-- it starts again at `Processing chunk 6/10`
+# Default Checkpoint Location
 
-You can inspect how many chunks are already saved:
-
-```powershell
-((Get-Content $ckpt -Raw | ConvertFrom-Json).completed).Count
-```
-
-## Default Checkpoint Location
-
-If you do not pass `--checkpoint-file`, the pipeline generates one automatically under:
+When `--checkpoint-file` is omitted, checkpoints are written under:
 
 ```text
 data/checkpoints/
@@ -183,43 +224,65 @@ Pattern:
 data/checkpoints/<book-stem>.<raw|filtered>.<book-path-hash>.json
 ```
 
-Details:
-
-- `<book-stem>` comes from the input filename
-- `raw` is used for normal runs
-- `filtered` is used when `--apply-nlp-filter` is enabled
-- `<book-path-hash>` is derived from the absolute input path
-
-For this repo, the default checkpoint file for:
+For example:
 
 ```text
-data\blindsight.txt
+data/blindsight.txt
 ```
 
-is:
+generates something similar to:
 
 ```text
-data\checkpoints\blindsight.raw.852d354748c2.json
+data/checkpoints/blindsight.raw.852d354748c2.json
 ```
 
-If you run with `--apply-nlp-filter`, the generated filename changes to the `filtered` variant.
+Filtered runs generate a separate checkpoint filename.
 
-## Restart From Scratch
+---
 
-If you want to ignore previous progress and re-extract from chunk 1, use:
+# Restart From Scratch
+
+Ignore any existing checkpoint:
 
 ```powershell
-.\.venv\Scripts\python.exe -m story_graph.main data\blindsight.txt --max-chunks 10 --reset-checkpoint
+.\.venv\Scripts\python.exe -m story_graph.main data\blindsight.txt --reset-checkpoint
 ```
 
-Or, if you are using a custom checkpoint path:
+Or with an explicit checkpoint:
 
 ```powershell
-.\.venv\Scripts\python.exe -m story_graph.main data\blindsight.txt --max-chunks 10 --checkpoint-file data\checkpoints\blindsight.test.json --reset-checkpoint
+.\.venv\Scripts\python.exe -m story_graph.main data\blindsight.txt --checkpoint-file data\checkpoints\blindsight.test.json --reset-checkpoint
 ```
 
-## Notes
+---
 
-- Resume works only when the checkpoint still matches the same chunk sequence. If the book content changes, the checkpoint is rejected.
-- Switching between filtered and unfiltered runs changes the chunk list, so those runs should use separate checkpoint files.
-- Checkpoints are written after each completed chunk, not before a chunk starts.
+# Project Architecture
+
+```
+                +----------------+
+                |   FastAPI API  |
+                +-------+--------+
+                        |
+                        |
+                Job Manager
+                        |
+         Shared Pipeline Core
+                        |
+      Relationship Extraction
+                        |
+                Graph Generation
+                        |
+                  PostgreSQL
+```
+
+The CLI and web application both execute the same extraction pipeline. The web application adds asynchronous job execution, persistence, and an HTTP API on top of the shared processing core.
+
+---
+
+# Notes
+
+* CLI checkpoint compatibility depends on the chunk sequence remaining unchanged.
+* Filtered and unfiltered runs should use separate checkpoints.
+* Checkpoints are written after every completed chunk.
+* Database schema changes are managed exclusively through Alembic migrations.
+* The web application stores persistent job state in PostgreSQL rather than the local filesystem.

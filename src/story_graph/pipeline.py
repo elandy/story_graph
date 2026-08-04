@@ -14,9 +14,8 @@ from story_graph.extraction.models import ExtractionResult
 from story_graph.extraction.pipeline import process_chunks
 from story_graph.graph.builder import build_graph
 from story_graph.graph.visualize import visualize_graph
-from story_graph.ingest.loader import load_book
 from story_graph.progress import PipelineProgressUpdate, ProgressCallback, emit_progress
-
+from story_graph.ingest.loader import load_text, load_text_from_upload
 
 @dataclass(slots=True)
 class StoryGraphRunConfig:
@@ -67,13 +66,29 @@ async def run_story_graph_pipeline_from_file(
     config: StoryGraphRunConfig,
 ) -> StoryGraphRunResult:
     input_path = Path(source_path)
-    text = load_book(str(input_path))
+    text = load_text(input_path)
     return await run_story_graph_pipeline(
         text=text,
         config=config,
         source_path=input_path,
     )
 
+async def run_story_graph_pipeline_from_upload(
+    filename: str,
+    file_bytes: bytes,
+    config: StoryGraphRunConfig,
+) -> StoryGraphRunResult:
+
+    text = load_text_from_upload(
+        filename,
+        file_bytes,
+    )
+
+    return await run_story_graph_pipeline(
+        text=text,
+        config=config,
+        source_path=None,
+    )
 
 async def run_story_graph_pipeline(
     text: str,
