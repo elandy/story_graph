@@ -19,17 +19,26 @@ services:
 
   story-graph:
     build: .
-    container_name: story-graph
     env_file:
       - .env
     environment:
       DATABASE_URL: postgresql+psycopg://story_graph:story_graph@postgres:5432/story_graph
     ports:
       - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
+    volumes:
+      - ./src:/app/src
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini:ro
+    command:
+      [
+        "uvicorn",
+        "story_graph.web.app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload"
+      ]
 
 volumes:
   story_graph_postgres_data:

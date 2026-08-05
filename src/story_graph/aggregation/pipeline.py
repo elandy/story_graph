@@ -1,8 +1,13 @@
+from langsmith import traceable
+
 from story_graph.aggregation.character_registry import CharacterRegistry
 from story_graph.aggregation.relationships import aggregate_relationships
 from story_graph.aggregation.sentiments import aggregate_sentiments
 
-
+@traceable(
+    run_type="chain",
+    name="Aggregate Results",
+)
 def aggregate(results):
 
     registry = CharacterRegistry()

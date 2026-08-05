@@ -1,14 +1,34 @@
+/* ============================================================
+   Story Graph Studio — "Threadbound" theme
+   A manuscript-and-thread identity: aged paper, bookbinder ink,
+   and the idea that a story graph is just threads pinned between names.
+   ============================================================ */
+
 :root {
-  --bg: #f6efe4;
-  --bg-accent: #dfe9d7;
-  --panel: rgba(255, 251, 245, 0.9);
-  --ink: #1f1d1b;
-  --muted: #665f58;
-  --line: rgba(31, 29, 27, 0.12);
-  --primary: #14532d;
-  --primary-strong: #0f3f22;
-  --warm: #bf5b31;
-  --shadow: 0 22px 50px rgba(53, 44, 33, 0.12);
+  --paper: #f1e8d4;
+  --paper-deep: #e6d7b3;
+  --panel: rgba(255, 251, 241, 0.92);
+  --panel-solid: #fdf8ec;
+
+  --ink: #241f22;
+  --ink-soft: #6d6255;
+  --ink-faint: #9a8f7d;
+
+  --line: rgba(36, 31, 34, 0.14);
+  --line-strong: rgba(36, 31, 34, 0.24);
+
+  --forest: #2f4a3c;
+  --forest-deep: #223529;
+  --wax: #8a3324;
+  --wax-soft: rgba(138, 51, 36, 0.12);
+  --gold: #a3792f;
+  --gold-soft: rgba(163, 121, 47, 0.16);
+
+  --shadow: 0 24px 56px rgba(48, 38, 22, 0.16);
+  --shadow-sm: 0 8px 18px rgba(48, 38, 22, 0.1);
+
+  --radius: 14px;
+  --radius-lg: 22px;
 }
 
 * {
@@ -19,212 +39,375 @@
   display: none !important;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: "Aptos", "Segoe UI", sans-serif;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  font-size: 15.5px;
   color: var(--ink);
   background:
-    radial-gradient(circle at top left, rgba(191, 91, 49, 0.15), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(20, 83, 45, 0.18), transparent 32%),
-    linear-gradient(145deg, var(--bg) 0%, var(--bg-accent) 100%);
+    radial-gradient(ellipse 900px 500px at 15% -5%, rgba(163, 121, 47, 0.14), transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 15%, rgba(47, 74, 60, 0.12), transparent 55%),
+    linear-gradient(160deg, var(--paper) 0%, var(--paper-deep) 100%);
 }
 
 .shell {
-  width: min(1180px, calc(100% - 2rem));
+  width: min(1120px, calc(100% - 2.5rem));
   margin: 0 auto;
-  padding: 2rem 0 2.5rem;
+  padding: 2.75rem 0 3.5rem;
   display: grid;
-  gap: 1.25rem;
+  gap: 1.5rem;
 }
 
-.hero,
-.panel {
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(10px);
-}
+/* ---------------- Hero ---------------- */
 
 .hero {
-  padding: 1.5rem 1.6rem;
+  position: relative;
+  padding: 2.75rem 2.4rem 2.4rem;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  overflow: hidden;
   display: grid;
-  gap: 0.75rem;
+  gap: 1rem;
+}
+
+.hero::before {
+  /* the signature element: a faint constellation of threads,
+     standing in for the relationship graph the app produces */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    radial-gradient(circle at 82% 20%, var(--gold) 0 3px, transparent 3px),
+    radial-gradient(circle at 92% 46%, var(--forest) 0 2.5px, transparent 2.5px),
+    radial-gradient(circle at 74% 62%, var(--wax) 0 2.5px, transparent 2.5px),
+    radial-gradient(circle at 95% 78%, var(--gold) 0 2px, transparent 2px),
+    radial-gradient(circle at 66% 12%, var(--ink-faint) 0 2px, transparent 2px);
+  mask-image: linear-gradient(to left, black 30%, transparent 78%);
+}
+
+.hero-thread {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 46%;
+  height: 100%;
+  opacity: 0.75;
+  pointer-events: none;
 }
 
 .eyebrow {
+  position: relative;
   display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   width: fit-content;
-  padding: 0.35rem 0.7rem;
+  padding: 0.3rem 0.75rem 0.3rem 0.55rem;
   border-radius: 999px;
-  background: rgba(20, 83, 45, 0.1);
-  color: var(--primary);
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
+  background: var(--gold-soft);
+  color: var(--gold);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
+.eyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+
 h1 {
+  position: relative;
   margin: 0;
-  font-family: "Iowan Old Style", Georgia, serif;
-  font-size: clamp(2.1rem, 5vw, 3.6rem);
-  line-height: 0.95;
-  max-width: 12ch;
+  font-family: "Fraunces", Georgia, serif;
+  font-optical-sizing: auto;
+  font-weight: 560;
+  font-size: clamp(2.2rem, 4.6vw, 3.35rem);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  max-width: 16ch;
+  color: var(--ink);
 }
 
 .hero p {
+  position: relative;
   margin: 0;
-  max-width: 62ch;
-  color: var(--muted);
-  line-height: 1.6;
+  max-width: 58ch;
+  color: var(--ink-soft);
+  line-height: 1.65;
+  font-size: 1rem;
 }
 
+/* ---------------- Panel & form ---------------- */
+
 .panel {
-  padding: 1.2rem;
+  padding: 1.4rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow);
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
 }
 
 form {
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
+}
+
+.field.help {
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius);
+  background: var(--gold-soft);
+  border: 1px dashed rgba(163, 121, 47, 0.4);
+  color: var(--ink);
+}
+
+.field.help p {
+  margin: 0 0 0.55rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.field.help p:last-child {
+  margin-bottom: 0;
+}
+
+.field.help strong {
+  color: var(--ink);
+}
+
+.field.help a {
+  color: var(--forest);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(47, 74, 60, 0.35);
+  text-underline-offset: 2px;
 }
 
 .dropzone {
   display: grid;
-  gap: 0.45rem;
-  padding: 1.25rem;
-  border: 1.5px dashed rgba(20, 83, 45, 0.25);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.55);
+  gap: 0.4rem;
+  padding: 1.4rem;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel-solid);
   cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.dropzone:hover,
+.dropzone:focus-within {
+  border-color: var(--gold);
+  background: var(--gold-soft);
 }
 
 .dropzone strong {
-  font-size: 1rem;
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 550;
+  font-size: 1.05rem;
+  color: var(--ink);
 }
 
 .dropzone span {
-  color: var(--muted);
-  font-size: 0.95rem;
+  color: var(--ink-faint);
+  font-size: 0.9rem;
 }
 
 input[type="file"] {
   width: 100%;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
 }
 
 .options {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
 .field {
   display: grid;
-  gap: 0.35rem;
-  padding: 0.9rem 1rem;
+  gap: 0.4rem;
+  padding: 0.85rem 1rem;
   border: 1px solid var(--line);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.65);
+  border-radius: var(--radius);
+  background: var(--panel-solid);
 }
 
-.field input[type="number"] {
-  width: 100%;
-  border: 1px solid rgba(31, 29, 27, 0.12);
-  border-radius: 12px;
-  padding: 0.65rem 0.8rem;
-  font: inherit;
-  background: rgba(255, 255, 255, 0.9);
+.field > span:first-child {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
 }
 
+.field input[type="number"],
 .field input[type="password"],
 .field input[type="search"],
 .field select {
   width: 100%;
-  border: 1px solid rgba(31, 29, 27, 0.12);
-  border-radius: 12px;
-  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
   font: inherit;
-  background: rgba(255, 255, 255, 0.9);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.9rem;
+  background: #fff;
+  color: var(--ink);
+}
+
+.field input[type="search"] {
+  font-family: "Inter", sans-serif;
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+input[type="file"]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 
 .checkbox {
   display: flex;
   gap: 0.75rem;
   align-items: start;
-  color: var(--muted);
-  line-height: 1.4;
+  color: var(--ink-soft);
+  line-height: 1.45;
+  font-size: 0.92rem;
 }
+
+.checkbox input {
+  margin-top: 0.2rem;
+}
+
+/* ---------------- Buttons ---------------- */
 
 button {
   border: 0;
-  border-radius: 999px;
-  padding: 0.9rem 1.2rem;
+  border-radius: 10px;
+  padding: 0.85rem 1.3rem;
   width: fit-content;
   font: inherit;
   font-weight: 600;
-  color: white;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%);
+  font-size: 0.94rem;
+  letter-spacing: 0.01em;
+  color: #fdf8ec;
+  background: linear-gradient(160deg, var(--forest) 0%, var(--forest-deep) 100%);
   cursor: pointer;
-  box-shadow: 0 12px 24px rgba(20, 83, 45, 0.2);
+  box-shadow: var(--shadow-sm);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(47, 74, 60, 0.25);
+}
+
+button:active {
+  transform: translateY(0);
 }
 
 button[disabled] {
-  opacity: 0.65;
+  opacity: 0.6;
   cursor: wait;
+  transform: none;
 }
 
 .button-secondary {
-  color: var(--primary);
-  background: rgba(20, 83, 45, 0.1);
+  color: var(--forest);
+  background: rgba(47, 74, 60, 0.09);
+  box-shadow: none;
+}
+
+.button-secondary:hover {
+  background: rgba(47, 74, 60, 0.16);
   box-shadow: none;
 }
 
 .button-small {
-  padding: 0.55rem 0.8rem;
-  font-size: 0.9rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.84rem;
+  border-radius: 8px;
 }
+
+/* ---------------- Status pill ---------------- */
 
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.35rem 0.7rem;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
   border-radius: 999px;
-  font-size: 0.85rem;
-  background: rgba(191, 91, 49, 0.12);
-  color: var(--warm);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: var(--gold-soft);
+  color: var(--gold);
+  white-space: nowrap;
+}
+
+.pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .meta {
   display: flex;
   gap: 0.8rem;
   flex-wrap: wrap;
-  color: var(--muted);
-  font-size: 0.95rem;
+  color: var(--ink-faint);
+  font-size: 0.9rem;
 }
 
 .meta a {
-  color: var(--primary);
+  color: var(--forest);
   text-decoration: none;
   font-weight: 600;
 }
 
+/* ---------------- Progress ---------------- */
+
 progress {
   width: 100%;
-  height: 14px;
+  height: 10px;
   border: 0;
   border-radius: 999px;
   overflow: hidden;
+  appearance: none;
 }
 
 progress::-webkit-progress-bar {
-  background: rgba(31, 29, 27, 0.08);
+  background: rgba(36, 31, 34, 0.08);
+  border-radius: 999px;
 }
 
 progress::-webkit-progress-value {
-  background: linear-gradient(90deg, var(--warm), var(--primary));
+  background: linear-gradient(90deg, var(--gold), var(--forest));
+  border-radius: 999px;
+}
+
+progress::-moz-progress-bar {
+  background: linear-gradient(90deg, var(--gold), var(--forest));
+  border-radius: 999px;
 }
 
 .progress-meta {
@@ -232,17 +415,20 @@ progress::-webkit-progress-value {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  color: var(--muted);
-  font-size: 0.92rem;
+  color: var(--ink-faint);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
 }
+
+/* ---------------- History / job catalog ---------------- */
 
 .history {
   display: grid;
-  gap: 0.75rem;
-  padding: 1.1rem 1.15rem;
+  gap: 0.9rem;
+  padding: 1.2rem 1.25rem;
   border: 1px solid var(--line);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.75);
+  border-radius: var(--radius);
+  background: var(--panel-solid);
 }
 
 .history-head {
@@ -255,13 +441,15 @@ progress::-webkit-progress-value {
 
 .history h2 {
   margin: 0;
-  font-size: 1rem;
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 560;
+  font-size: 1.15rem;
 }
 
 .history-filters {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(260px, 1.5fr) minmax(180px, 0.8fr);
+  grid-template-columns: minmax(240px, 1.5fr) minmax(170px, 0.8fr);
 }
 
 .job-list {
@@ -269,14 +457,45 @@ progress::-webkit-progress-value {
   gap: 0.6rem;
 }
 
+/* Each job reads like a catalog card, with a spine-colored edge
+   that encodes its state — a visual index rather than a decoration. */
 .job-row {
+  position: relative;
   display: grid;
   gap: 0.65rem;
-  padding: 0.85rem;
+  padding: 0.9rem 0.95rem 0.9rem 1.15rem;
   border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
+  border-radius: 12px;
+  background: #fff;
   transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.job-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--ink-faint);
+}
+
+.job-row[data-state="running"]::before,
+.job-row[data-state="queued"]::before {
+  background: var(--gold);
+}
+
+.job-row[data-state="completed"]::before {
+  background: var(--forest);
+}
+
+.job-row[data-state="failed"]::before {
+  background: var(--wax);
+}
+
+.job-row[data-state="paused"]::before {
+  background: var(--ink-faint);
 }
 
 .job-row.is-expanded {
@@ -289,20 +508,20 @@ progress::-webkit-progress-value {
 
 .job-row.selectable:hover,
 .job-row.selectable:focus-visible {
-  border-color: rgba(20, 83, 45, 0.35);
-  box-shadow: 0 10px 22px rgba(20, 83, 45, 0.08);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
   outline: none;
 }
 
 .job-row.active {
-  border-color: rgba(20, 83, 45, 0.45);
-  box-shadow: inset 3px 0 0 var(--primary);
+  border-color: rgba(47, 74, 60, 0.4);
+  box-shadow: var(--shadow-sm);
 }
 
 .job-main {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.3rem;
   min-width: 0;
 }
 
@@ -316,15 +535,18 @@ progress::-webkit-progress-value {
 
 .job-title {
   overflow-wrap: anywhere;
-  font-weight: 700;
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 560;
+  font-size: 1.02rem;
 }
 
 .job-meta {
   display: flex;
   gap: 0.65rem;
   flex-wrap: wrap;
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--ink-faint);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
 }
 
 .job-actions {
@@ -336,32 +558,52 @@ progress::-webkit-progress-value {
 .job-status {
   display: grid;
   gap: 0.75rem;
-  padding-top: 0.15rem;
+  padding-top: 0.1rem;
 }
 
 .job-message {
   color: var(--ink);
   line-height: 1.5;
+  font-size: 0.92rem;
 }
 
 .job-progress {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .job-progress[hidden] {
   display: none !important;
 }
 
-@media (max-width: 700px) {
-  .shell {
-    width: min(100% - 1rem, 1180px);
-    padding-top: 1rem;
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
   }
 
-  .hero,
-  .panel {
-    border-radius: 20px;
+  button,
+  .job-row {
+    transition: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .shell {
+    width: min(100% - 1.2rem, 1120px);
+    padding-top: 1.25rem;
+  }
+
+  .hero {
+    padding: 2rem 1.5rem;
+  }
+
+  .hero::before {
+    opacity: 0.35;
+  }
+
+  .panel,
+  .history {
+    border-radius: 16px;
   }
 
   .history-filters {

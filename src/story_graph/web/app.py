@@ -117,7 +117,6 @@ async def create_job(
             session_id=session_id,
             upload_name=filename,
             file_bytes=raw_bytes,
-            provider_api_key=provider_api_key,
             apply_nlp_filter=apply_nlp_filter,
             max_chunks=_parse_max_chunks(max_chunks),
             max_chunk_tokens=_parse_non_negative_int(
@@ -140,6 +139,10 @@ async def create_job(
                 field_name="max_batch_tokens",
                 default=9000,
             ),
+        )
+        request.app.state.job_manager.enqueue_job(
+            status.job_id,
+            provider_api_key,
         )
 
     except UnicodeDecodeError:
@@ -179,16 +182,25 @@ async def get_job_status(job_id: str, request: Request):
 
 
 @app.post("/jobs/{job_id}/retry", status_code=202)
-async def retry_job(job_id: str, request: Request):
+async def retry_job(job_id: str, request: Request, api_key: str = Form("")):
     try:
         session_id = get_or_create_session_id(request)
+        provider_api_key = (
+            None
+            if _server_api_key_configured()
+            else api_key.strip()
+        )
+        if not _server_api_key_configured() and not provider_api_key:
+            return JSONResponse(
+                {"error": "An API key is required."},
+                status_code=400,
+            )
 
         request.app.state.job_manager.get_status_for_session(
             job_id,
             session_id,
         )
-
-        status = request.app.state.job_manager.retry_job(job_id)
+        status = request.app.state.job_manager.retry_job(job_id, provider_api_key)
 
     except JobNotFoundError:
         return JSONResponse({"error": "Job not found."}, status_code=404)
@@ -310,6 +322,43 @@ async def download_job_graph(request: Request, job_id: str):
         },
     )
 
+@app.get("/jobs/{job_id}/graph/json/download")
+async def download_job_graph_json(request: Request, job_id: str):
+    manager = request.app.state.job_manager
+
+    try:
+        session_id = get_or_create_session_id(request)
+        status = manager.get_status_for_session(job_id, session_id)
+    except JobNotFoundError:
+        return JSONResponse(
+            {"error": "Job not found."},
+            status_code=404,
+        )
+
+    if status.state != JobState.completed:
+        return JSONResponse(
+            {"error": "Graph output is not ready yet."},
+            status_code=409,
+        )
+
+    graph_json_bytes = manager.graph_json_bytes(job_id)
+
+    if graph_json_bytes is None:
+        return JSONResponse(
+            {"error": "Graph JSON artifact is missing."},
+            status_code=404,
+        )
+
+    filename = Path(status.original_filename).stem + "_story_graph.json"
+
+    return Response(
+        graph_json_bytes,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )
+
 def _serialize_status(status: JobStatus) -> dict:
     payload = status.model_dump(
         mode="json",
@@ -327,6 +376,12 @@ def _serialize_status(status: JobStatus) -> dict:
 
     payload["graph_download_url"] = (
         f"/jobs/{status.job_id}/graph/download"
+        if status.state == JobState.completed
+        else None
+    )
+
+    payload["graph_json_url"] = (
+        f"/jobs/{status.job_id}/graph/json/download"
         if status.state == JobState.completed
         else None
     )

@@ -141,6 +141,41 @@ Job metadata, status, checkpoints and generated artifacts are persisted in Postg
 
 ---
 
+# Bring Your Own API Key (BYOK)
+
+The web application supports a Bring Your Own Key (BYOK) workflow when no server-side API key is configured.
+
+When BYOK mode is active:
+
+1. The user enters their provider API key in the web interface when creating a job.
+2. The key is used only while starting and executing that job.
+3. The key is never stored in PostgreSQL, job artifacts, checkpoints, logs, or generated files.
+4. If a job is paused, fails, or the application restarts, the user must provide an API key again when resuming the job.
+5. Users may provide a different API key when retrying a job, allowing them to switch accounts, rotate keys, or continue after quota exhaustion.
+
+Job persistence contains only the information required to resume computation:
+
+* uploaded input file
+* extraction checkpoint
+* processing configuration
+* progress state
+* generated artifacts
+
+API credentials are treated as runtime-only data and are intentionally excluded from persistent job state.
+
+If a server-side key is configured through:
+
+```text
+GOOGLE_API_KEY
+```
+or:
+```text
+GEMINI_API_KEY
+```
+the web application uses that key instead and does not request a key from users.
+
+---
+
 # Outputs
 
 ## CLI
@@ -286,3 +321,4 @@ The CLI and web application both execute the same extraction pipeline. The web a
 * Checkpoints are written after every completed chunk.
 * Database schema changes are managed exclusively through Alembic migrations.
 * The web application stores persistent job state in PostgreSQL rather than the local filesystem.
+* BYOK API keys are never persisted. Resuming or retrying jobs in BYOK mode requires the user to provide a valid API key again.

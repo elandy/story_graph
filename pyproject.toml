@@ -15,6 +15,7 @@ dependencies = [
     "langchain-community>=0.4.2",
     "langchain-google-genai>=4.3.2",
     "langchain-openai>=1.4.1",
+    "langsmith>=0.10.15",
     "networkx>=3.6.1",
     "openai>=2.26.0",
     "psycopg[binary]>=3.3.4",

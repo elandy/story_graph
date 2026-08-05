@@ -4,6 +4,8 @@ import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+from langsmith import traceable
+
 from story_graph.extraction.checkpoint import load_checkpoint, write_checkpoint
 from story_graph.extraction.extractor import extract_relationships, extract_relationships_batch
 from story_graph.extraction.models import ExtractionResult
@@ -128,7 +130,10 @@ def annotate_temporal_positions(result: ExtractionResult, chunk: dict) -> Extrac
 
     return result
 
-
+@traceable(
+    run_type="chain",
+    name="Chunk Extraction",
+)
 async def process_chunks(
     chunks: list[dict],
     checkpoint_path: Path | None = None,

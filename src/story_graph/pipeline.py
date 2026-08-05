@@ -1,9 +1,12 @@
+import json
 from dataclasses import dataclass, field
 from collections.abc import Callable
 from math import ceil
 from pathlib import Path
 
 from dotenv import load_dotenv
+from langsmith import traceable
+from networkx.readwrite import json_graph
 
 load_dotenv()
 
@@ -31,6 +34,7 @@ class StoryGraphRunConfig:
     max_batch_tokens: int = 9000
     provider_api_key: str | None = None
     output_html_path: Path = field(default_factory=lambda: Path("story_graph.html"))
+    output_json_path: Path = field(default_factory=lambda: Path("story_graph.json"))
     debug_json_path: Path | None = None
     confirm_extraction: Callable[[int], bool] | None = None
     should_pause: Callable[[], bool] | None = None
@@ -47,6 +51,7 @@ class StoryGraphRunResult:
     source_path: Path | None
     checkpoint_path: Path | None
     output_html_path: Path
+    output_json_path: Path
     debug_json_path: Path | None
     total_paragraphs: int
     total_chunks_raw: int
@@ -69,7 +74,7 @@ async def run_story_graph_pipeline_from_file(
     text = load_text(input_path)
     return await run_story_graph_pipeline(
         text=text,
-        config=config,
+        run_config=config,
         source_path=input_path,
     )
 
@@ -78,41 +83,38 @@ async def run_story_graph_pipeline_from_upload(
     file_bytes: bytes,
     config: StoryGraphRunConfig,
 ) -> StoryGraphRunResult:
-
-    text = load_text_from_upload(
-        filename,
-        file_bytes,
-    )
-
+    text = load_text_from_upload(filename, file_bytes)
     return await run_story_graph_pipeline(
         text=text,
-        config=config,
+        run_config=config,
         source_path=None,
     )
 
+
+@traceable(name="story_graph_pipeline")
 async def run_story_graph_pipeline(
     text: str,
-    config: StoryGraphRunConfig,
+    run_config: StoryGraphRunConfig,
     source_path: Path | None = None,
 ) -> StoryGraphRunResult:
-    if config.max_chunks < 0:
+    if run_config.max_chunks < 0:
         raise ValueError("max_chunks must be zero or a positive integer.")
-    if config.max_retries < 0:
+    if run_config.max_retries < 0:
         raise ValueError("max_retries must be zero or a positive integer.")
-    if config.max_chunk_tokens < 0:
+    if run_config.max_chunk_tokens < 0:
         raise ValueError("max_chunk_tokens must be zero or a positive integer.")
-    if config.max_paragraphs_per_chunk < 0:
+    if run_config.max_paragraphs_per_chunk < 0:
         raise ValueError("max_paragraphs_per_chunk must be zero or a positive integer.")
-    if config.chunk_overlap < 0:
+    if run_config.chunk_overlap < 0:
         raise ValueError("chunk_overlap must be zero or a positive integer.")
-    if config.batch_size <= 0:
+    if run_config.batch_size <= 0:
         raise ValueError("batch_size must be a positive integer.")
-    if config.max_batch_tokens <= 0:
+    if run_config.max_batch_tokens <= 0:
         raise ValueError("max_batch_tokens must be a positive integer.")
 
     paragraphs = split_paragraphs(text)
     emit_progress(
-        config.progress_callback,
+        run_config.progress_callback,
         PipelineProgressUpdate(
             stage="chunking",
             message=f"Paragraphs: {len(paragraphs)}",
@@ -122,21 +124,21 @@ async def run_story_graph_pipeline(
 
     chunks = chunk_paragraphs(
         paragraphs,
-        max_tokens=config.max_chunk_tokens,
-        max_paragraphs=config.max_paragraphs_per_chunk,
-        overlap=config.chunk_overlap,
+        max_tokens=run_config.max_chunk_tokens,
+        max_paragraphs=run_config.max_paragraphs_per_chunk,
+        overlap=run_config.chunk_overlap,
     )
     total_chunks_raw = len(chunks)
     filtered_out_chunks = 0
 
-    if config.apply_nlp_filter:
+    if run_config.apply_nlp_filter:
         from story_graph.filtering.character_filter import has_character_interaction
 
         filtered_chunks = [chunk for chunk in chunks if has_character_interaction(chunk["text"])]
         filtered_out_chunks = total_chunks_raw - len(filtered_chunks)
         chunks = filtered_chunks
         emit_progress(
-            config.progress_callback,
+            run_config.progress_callback,
             PipelineProgressUpdate(
                 stage="filtering",
                 message=f"Filtered chunks without interaction: {filtered_out_chunks}",
@@ -147,13 +149,13 @@ async def run_story_graph_pipeline(
 
     total_chunks_available = len(chunks)
     total_chunks_to_process = (
-        min(config.max_chunks, total_chunks_available)
-        if config.max_chunks
+        min(run_config.max_chunks, total_chunks_available)
+        if run_config.max_chunks
         else total_chunks_available
     )
 
     emit_progress(
-        config.progress_callback,
+        run_config.progress_callback,
         PipelineProgressUpdate(
             stage="chunking",
             message=f"Total chunks available: {total_chunks_available}",
@@ -165,15 +167,15 @@ async def run_story_graph_pipeline(
         ),
     )
     emit_progress(
-        config.progress_callback,
+        run_config.progress_callback,
         PipelineProgressUpdate(
             stage="chunking",
             message=(
                 "Chunking config: "
-                f"max_tokens={config.max_chunk_tokens or 'off'}, "
-                f"max_paragraphs={config.max_paragraphs_per_chunk or 'off'}, "
-                f"batch_size={config.batch_size}, "
-                f"max_batch_tokens={config.max_batch_tokens}"
+                f"max_tokens={run_config.max_chunk_tokens or 'off'}, "
+                f"max_paragraphs={run_config.max_paragraphs_per_chunk or 'off'}, "
+                f"batch_size={run_config.batch_size}, "
+                f"max_batch_tokens={run_config.max_batch_tokens}"
             ),
             total_paragraphs=len(paragraphs),
             total_chunks_raw=total_chunks_raw,
@@ -183,7 +185,7 @@ async def run_story_graph_pipeline(
         ),
     )
     emit_progress(
-        config.progress_callback,
+        run_config.progress_callback,
         PipelineProgressUpdate(
             stage="chunking",
             message=f"Chunks to process: {total_chunks_to_process}",
@@ -197,12 +199,12 @@ async def run_story_graph_pipeline(
 
     estimated_time_seconds = _estimate_runtime_seconds(
         total_chunks=total_chunks_to_process,
-        batch_size=config.batch_size,
-        rate_limit_every=config.rate_limit_every,
-        rate_limit_seconds=config.rate_limit_seconds,
+        batch_size=run_config.batch_size,
+        rate_limit_every=run_config.rate_limit_every,
+        rate_limit_seconds=run_config.rate_limit_seconds,
     )
     emit_progress(
-        config.progress_callback,
+        run_config.progress_callback,
         PipelineProgressUpdate(
             stage="chunking",
             message=f"E.T.A.: {estimated_time_seconds / 60:.1f} minutes.",
@@ -213,11 +215,11 @@ async def run_story_graph_pipeline(
 
     checkpoint_path = _resolve_checkpoint_path(
         source_path=source_path,
-        config=config,
+        config=run_config,
     )
     if checkpoint_path is not None:
         emit_progress(
-            config.progress_callback,
+            run_config.progress_callback,
             PipelineProgressUpdate(
                 stage="extraction",
                 message=f"Extraction checkpoint: {checkpoint_path}",
@@ -230,18 +232,18 @@ async def run_story_graph_pipeline(
     results = await process_chunks(
         chunks[:total_chunks_to_process],
         checkpoint_path=checkpoint_path,
-        reset_checkpoint=config.reset_checkpoint,
-        confirm_continue=config.confirm_extraction,
-        should_pause=config.should_pause,
-        progress_callback=config.progress_callback,
-        rate_limit_every=config.rate_limit_every,
-        rate_limit_seconds=config.rate_limit_seconds,
-        max_retries=config.max_retries,
-        retry_backoff_base_seconds=config.retry_backoff_base_seconds,
-        retry_backoff_max_seconds=config.retry_backoff_max_seconds,
-        batch_size=config.batch_size,
-        max_batch_tokens=config.max_batch_tokens,
-        provider_api_key=config.provider_api_key,
+        reset_checkpoint=run_config.reset_checkpoint,
+        confirm_continue=run_config.confirm_extraction,
+        should_pause=run_config.should_pause,
+        progress_callback=run_config.progress_callback,
+        rate_limit_every=run_config.rate_limit_every,
+        rate_limit_seconds=run_config.rate_limit_seconds,
+        max_retries=run_config.max_retries,
+        retry_backoff_base_seconds=run_config.retry_backoff_base_seconds,
+        retry_backoff_max_seconds=run_config.retry_backoff_max_seconds,
+        batch_size=run_config.batch_size,
+        max_batch_tokens=run_config.max_batch_tokens,
+        provider_api_key=run_config.provider_api_key,
     )
 
     total_characters = sum(len(result.characters) for result in results)
@@ -249,7 +251,7 @@ async def run_story_graph_pipeline(
     total_sentiments = sum(len(result.sentiments) for result in results)
 
     emit_progress(
-        config.progress_callback,
+        run_config.progress_callback,
         PipelineProgressUpdate(
             stage="aggregation",
             message="Aggregating extraction results.",
@@ -261,17 +263,15 @@ async def run_story_graph_pipeline(
     registry, relationships, sentiments = aggregate(results)
 
     debug_json_path = None
-    if config.debug_json:
-        import json
-
-        debug_json_path = config.debug_json_path or Path("debug_relationships.json")
+    if run_config.debug_json:
+        debug_json_path = run_config.debug_json_path or Path("debug_relationships.json")
         debug_json_path.parent.mkdir(parents=True, exist_ok=True)
         debug_json_path.write_text(
             json.dumps(relationships, ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",
         )
         emit_progress(
-            config.progress_callback,
+            run_config.progress_callback,
             PipelineProgressUpdate(
                 stage="aggregation",
                 message=f"Wrote debug relationships JSON: {debug_json_path}",
@@ -281,7 +281,7 @@ async def run_story_graph_pipeline(
         )
 
     emit_progress(
-        config.progress_callback,
+        run_config.progress_callback,
         PipelineProgressUpdate(
             stage="graph",
             message="Building graph.",
@@ -291,26 +291,45 @@ async def run_story_graph_pipeline(
     )
     graph = build_graph(registry, relationships, sentiments)
 
+    graph_json = json_graph.node_link_data(graph, edges="edges")
+
+    run_config.output_json_path.parent.mkdir(parents=True, exist_ok=True)
+    run_config.output_json_path.write_text(
+        json.dumps(graph_json, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    emit_progress(
+        run_config.progress_callback,
+        PipelineProgressUpdate(
+            stage="graph",
+            message=f"Graph JSON written to {run_config.output_json_path}",
+            total_chunks_to_process=total_chunks_to_process,
+            completed_chunks=len(results),
+        ),
+    )
+
     visualize_graph(
         graph,
-        output_file=str(config.output_html_path),
+        output_file=str(run_config.output_html_path),
         total_chunks=total_chunks_to_process,
     )
     emit_progress(
-        config.progress_callback,
+        run_config.progress_callback,
         PipelineProgressUpdate(
             stage="graph",
-            message=f"Graph HTML written to {config.output_html_path}",
+            message=f"Graph HTML written to {run_config.output_html_path}",
             total_chunks_to_process=total_chunks_to_process,
             completed_chunks=len(results),
-            output_path=config.output_html_path,
+            output_path=run_config.output_html_path,
         ),
     )
 
     return StoryGraphRunResult(
         source_path=source_path,
         checkpoint_path=checkpoint_path,
-        output_html_path=config.output_html_path,
+        output_html_path=run_config.output_html_path,
+        output_json_path=run_config.output_json_path,
         debug_json_path=debug_json_path,
         total_paragraphs=len(paragraphs),
         total_chunks_raw=total_chunks_raw,

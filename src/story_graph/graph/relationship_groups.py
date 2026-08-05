@@ -42,19 +42,21 @@ RELATIONSHIP_EXCLUSION_GROUPS = {
     },
 }
 
-# Color palette by relationship group (used for visualization)
+# Color palette by relationship group, tuned to the Story Graph Studio
+# "Threadbound" theme (ink page, gold thread, wax-seal accents) and picked
+# so each group stays distinguishable against the dark network background.
 RELATIONSHIP_GROUP_COLORS = {
-    "social": "#2ca02c",  # green
-    "romantic": "#e377c2",  # pink
-    "family": "#ff7f0e",  # orange
-    "professional_authority": "#1f77b4",  # blue
-    "professional_employment": "#9467bd",  # purple
-    "professional_education": "#17becf",  # cyan
-    "professional_service": "#8c564b",  # brown
-    "professional_covert": "#d62728",  # red
+    "social": "#a3792f",                # gold thread — the everyday ties
+    "romantic": "#b1496a",              # wine rose
+    "family": "#4f8f68",                # verdigris green
+    "professional_authority": "#5b74b0",  # slate indigo
+    "professional_employment": "#8863ab",  # plum
+    "professional_education": "#4fa3a3",   # teal
+    "professional_service": "#a9754a",     # umber
+    "professional_covert": "#a1402e",      # wax-seal vermillion
 }
 
-DEFAULT_RELATION_COLOR = "#7f7f7f"  # gray for unknown/uncategorized
+DEFAULT_RELATION_COLOR = "#9a8f7d"  # muted taupe for unknown/uncategorized
 
 
 def get_relation_group(relation_value: str) -> str:

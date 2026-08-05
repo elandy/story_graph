@@ -1,4 +1,5 @@
 import asyncio
+import json
 import tempfile
 import threading
 import traceback
@@ -7,11 +8,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from queue import Empty, Queue
 
+import networkx as nx
 from sqlalchemy import delete, select
 
 from story_graph.extraction.pipeline import ExtractionPaused
-from story_graph.pipeline import StoryGraphRunConfig, run_story_graph_pipeline_from_file, \
-    run_story_graph_pipeline_from_upload
+from story_graph.pipeline import (
+    StoryGraphRunConfig,
+    run_story_graph_pipeline_from_upload,
+)
 from story_graph.progress import PipelineProgressUpdate
 from story_graph.web.compression import COMPRESSION_ALGORITHM, compress_bytes, decompress_bytes
 from story_graph.web.database import SessionLocal
@@ -39,7 +43,7 @@ class JobManager:
     def __init__(self, jobs_root: Path | None = None, retention_days: int = 30):
         self.jobs_root = Path(jobs_root or tempfile.gettempdir()).resolve()
         self.retention_days = retention_days
-        self._queue: Queue[str | None] = Queue()
+        self._queue: Queue[tuple[str, str | None] | None] = Queue()
         self._stop_event = threading.Event()
         self._write_lock = threading.RLock()
         self._worker: threading.Thread | None = None
@@ -67,12 +71,18 @@ class JobManager:
         if self._worker is not None and not self._worker.is_alive():
             self._worker = None
 
+    def enqueue_job(
+            self,
+            job_id: str,
+            provider_api_key: str | None,
+    ) -> None:
+        self._queue.put((job_id, provider_api_key))
+
     def create_job(
         self,
         upload_name: str,
         file_bytes: bytes,
         session_id: str,
-        provider_api_key: str | None = None,
         apply_nlp_filter: bool = False,
         max_chunks: int = 0,
         max_chunk_tokens: int = 3000,
@@ -113,7 +123,6 @@ class JobManager:
             batch_size=batch_size,
             max_batch_tokens=max_batch_tokens,
         )
-
         with self._write_lock, SessionLocal() as session:
             session.add(self._record_from_status(status))
             self._upsert_artifact(
@@ -123,17 +132,7 @@ class JobManager:
                 file_bytes,
                 content_type="text/plain; charset=utf-8",
             )
-            if provider_api_key:
-                self._upsert_artifact(
-                    session,
-                    job_id,
-                    ".provider_api_key",
-                    provider_api_key.encode("utf-8"),
-                    content_type="text/plain; charset=utf-8",
-                )
             session.commit()
-
-        self._queue.put(job_id)
         return status
 
     def list_statuses(self) -> list[JobStatus]:
@@ -152,7 +151,7 @@ class JobManager:
             ).all()
             return [self._status_from_record(record) for record in records]
 
-    def retry_job(self, job_id: str) -> JobStatus:
+    def retry_job(self, job_id: str, provider_api_key: str | None) -> JobStatus:
         with self._write_lock:
             status = self.get_status(job_id)
             if status.state not in {JobState.failed, JobState.paused}:
@@ -170,7 +169,7 @@ class JobManager:
             status.updated_at = _utc_now()
             self._write_status(status)
 
-        self._queue.put(job_id)
+        self._queue.put((job_id, provider_api_key))
         return status
 
     def pause_job(self, job_id: str) -> JobStatus:
@@ -223,6 +222,13 @@ class JobManager:
         status = self.get_status(job_id)
         return self.get_artifact_bytes(job_id, status.artifacts.graph_file)
 
+    def graph_json_bytes(self, job_id: str) -> bytes | None:
+        status = self.get_status(job_id)
+        return self.get_artifact_bytes(
+            job_id,
+            status.artifacts.graph_json_file,
+        )
+
     def get_artifact_bytes(self, job_id: str, name: str) -> bytes | None:
         with SessionLocal() as session:
             artifact = session.scalar(
@@ -241,26 +247,25 @@ class JobManager:
     def checkpoint_path(self, job_id: str) -> Path:
         raise RuntimeError("Checkpoint artifacts are stored in Postgres.")
 
-    def debug_json_path(self, job_id: str) -> Path:
-        raise RuntimeError("Debug artifacts are stored in Postgres.")
-
     def _worker_loop(self) -> None:
         while not self._stop_event.is_set():
             try:
-                job_id = self._queue.get(timeout=0.25)
+                item = self._queue.get(timeout=0.25)
             except Empty:
                 continue
 
-            if job_id is None:
+            if item is None:
                 self._queue.task_done()
                 break
 
+            job_id, provider_api_key = item
+
             try:
-                self._run_job(job_id)
+                self._run_job(job_id, provider_api_key)
             finally:
                 self._queue.task_done()
 
-    def _run_job(self, job_id: str) -> None:
+    def _run_job(self, job_id: str, provider_api_key: str | None) -> None:
         try:
             status = self.get_status(job_id)
         except JobNotFoundError:
@@ -283,7 +288,8 @@ class JobManager:
             workspace = Path(tmp_dir)
             checkpoint_path = workspace / status.artifacts.checkpoint_file
             graph_path = workspace / status.artifacts.graph_file
-            # debug_json_path = workspace / status.artifacts.debug_relationships_file
+            json_path = workspace / status.artifacts.graph_json_file
+
             input_bytes = self.get_artifact_bytes(job_id, status.artifacts.input_file)
 
             if input_bytes is None:
@@ -301,8 +307,6 @@ class JobManager:
             checkpoint_bytes = self.get_artifact_bytes(job_id, status.artifacts.checkpoint_file)
             if checkpoint_bytes is not None:
                 checkpoint_path.write_bytes(checkpoint_bytes)
-
-            provider_api_key = self._read_provider_api_key(job_id)
 
             def persist_checkpoint_if_present() -> None:
                 if checkpoint_path.exists():
@@ -398,6 +402,17 @@ class JobManager:
                     status.artifacts.checkpoint_file,
                     content_type="application/json",
                 )
+
+            graph_data = nx.node_link_data(result.graph, edges="links")
+            json_path.write_text(
+                json.dumps(
+                    graph_data,
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
             if graph_path.exists():
                 self._save_file_artifact(
                     job_id,
@@ -405,13 +420,13 @@ class JobManager:
                     status.artifacts.graph_file,
                     content_type="text/html; charset=utf-8",
                 )
-            # if debug_json_path.exists():
-            #     self._save_file_artifact(
-            #         job_id,
-            #         debug_json_path,
-            #         status.artifacts.debug_relationships_file,
-            #         content_type="application/json",
-            #     )
+            if json_path.exists():
+                self._save_file_artifact(
+                    job_id,
+                    json_path,
+                    status.artifacts.graph_json_file,
+                    content_type="application/json; charset=utf-8",
+                )
 
             self._update_status(
                 job_id,
@@ -441,14 +456,13 @@ class JobManager:
             ).all()
 
             for record in records:
-                record.state = JobState.queued.value
-                record.stage = "queued"
-                record.message = "Job queued."
+                record.state = JobState.paused.value
+                record.stage = "paused"
+                record.message = "Job requires API key to resume."
                 record.pause_requested = False
                 record.error = None
                 record.traceback = None
                 record.updated_at = _utc_now()
-                self._queue.put(record.job_id)
 
             session.commit()
 
@@ -493,14 +507,6 @@ class JobManager:
                     session.delete(record)
 
             session.commit()
-
-    def _read_provider_api_key(self, job_id: str) -> str | None:
-        data = self.get_artifact_bytes(job_id, ".provider_api_key")
-        if data is None:
-            return None
-
-        value = data.decode("utf-8").strip()
-        return value or None
 
     def _save_file_artifact(
         self,

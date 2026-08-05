@@ -4,13 +4,44 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Story Graph Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,480;9..144,560;9..144,650&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
   <main class="shell">
     <section class="hero">
+      <svg class="hero-thread" viewBox="0 0 420 320" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- spokes: the protagonist connects to nearly everyone -->
+        <line x1="330" y1="150" x2="256" y2="72"  stroke="#a3792f" stroke-width="1.4"/>
+        <line x1="330" y1="150" x2="352" y2="58"  stroke="#a3792f" stroke-width="1.6"/>
+        <line x1="330" y1="150" x2="398" y2="132" stroke="#a3792f" stroke-width="1.8"/>
+        <line x1="330" y1="150" x2="232" y2="150" stroke="#a3792f" stroke-width="1.2"/>
+        <line x1="330" y1="150" x2="286" y2="224" stroke="#a3792f" stroke-width="1.6"/>
+        <line x1="330" y1="150" x2="374" y2="220" stroke="#a3792f" stroke-width="1.4"/>
+        <line x1="330" y1="150" x2="318" y2="288" stroke="#a3792f" stroke-width="1"/>
+
+        <!-- a few secondary relationships among the rest of the cast -->
+        <line x1="352" y1="58"  x2="398" y2="132" stroke="#8a3324" stroke-width="1.2"/>
+        <line x1="232" y1="150" x2="286" y2="224" stroke="#2f4a3c" stroke-width="1"/>
+        <line x1="374" y1="220" x2="318" y2="288" stroke="#2f4a3c" stroke-width="1"/>
+        <line x1="256" y1="72"  x2="232" y2="150" stroke="#9a8f7d" stroke-width="0.9"/>
+
+        <!-- outer cast -->
+        <circle cx="256" cy="72"  r="4"   fill="#9a8f7d"/>
+        <circle cx="352" cy="58"  r="4.5" fill="#8a3324"/>
+        <circle cx="398" cy="132" r="4.5" fill="#8a3324"/>
+        <circle cx="232" cy="150" r="4"   fill="#2f4a3c"/>
+        <circle cx="286" cy="224" r="4.5" fill="#2f4a3c"/>
+        <circle cx="374" cy="220" r="4"   fill="#9a8f7d"/>
+        <circle cx="318" cy="288" r="3.5" fill="#9a8f7d"/>
+
+        <!-- protagonist: the hub -->
+        <circle cx="330" cy="150" r="8" fill="#a3792f"/>
+      </svg>
       <span class="eyebrow">Story Graph Studio</span>
-      <h1>Upload a book. Get the character relationship graph back in the browser.</h1>
+      <h1>Upload a book. Watch its cast of characters take shape as a graph.</h1>
       <p>
         Upload TXT, PDF, DOCX, or EPUB files and generate an interactive story graph.
         Jobs, checkpoints, artifacts, and status information are persisted in the database,
@@ -20,8 +51,32 @@
 
     <section class="panel">
       <form id="upload-form">
+        <div class="field help">
+          <p>
+            <strong>Bring your own Gemini API key.</strong>
+            Story Graph never stores your API key. It's used only for the current processing request and discarded afterward.
+          </p>
+          <p>
+            Don't have a key? Sign in with your Google account and create one from
+            <a
+              href="https://aistudio.google.com/app/api-keys"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Google AI Studio
+            </a>.
+            The official documentation is available
+            <a href="https://ai.google.dev/gemini-api/docs/api-key"
+               target="_blank"
+               rel="noopener noreferrer"
+            >here</a>.
+          </p>
+          <p>
+            If a job is paused or later resumed, you'll be asked to provide your API key again —
+            handy if your previous quota has run out.
+          </p>
+        </div>
         {{api_key_field}}
-
         <label class="dropzone" for="file-input">
           <strong id="selected-file">Choose a TXT, PDF, DOCX, or EPUB file</strong>
           <span>
@@ -68,7 +123,7 @@
           </label>
         </div>
 
-        <button id="submit-button" type="submit">Start Processing</button>
+        <button id="submit-button" type="submit">Start processing</button>
       </form>
 
       <section class="history">

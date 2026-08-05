@@ -16,6 +16,7 @@ class JobArtifacts(BaseModel):
     input_file: str = "input.txt"
     checkpoint_file: str = "checkpoint.json"
     graph_file: str = "story_graph.html"
+    graph_json_file: str = "story_graph.json"
     debug_relationships_file: str = "debug_relationships.json"
     status_file: str = "status.json"
 

@@ -1,6 +1,7 @@
 import json
 
 from langchain_core.prompts import ChatPromptTemplate
+from langsmith import traceable
 
 from .models import BatchExtractionResult, ExtractionResult
 from .model_factory import _get_chat_llm
@@ -8,24 +9,25 @@ from .model_factory import _get_chat_llm
 # Keep your extraction rules text so the model gets the same instructions.
 EXTRACTION_RULES = (
     "Rules:\n"
-    "- Include relationships that are explicitly stated or clearly implied by the text.\n"
-    "- Use common-sense inference: e.g., classmate, new classmate, coworker, teammate, roommate, boss, "
-    "student, neighbor, enemy, or friend all imply a relationship even if not written as "
-    "'X is Y'.\n"
-    "- If the text establishes a social or role connection, create a relationship edge.\n"
-    "- Prefer the most specific kinship label supported by the text. For example, use aunt, uncle, "
-    "niece, nephew, cousin, grandparent, or grandchild when that is what the text indicates.\n"
-    "- Do not collapse specific family relationships into parent/child. An aunt or uncle is not a parent. "
-    "A guardian or caretaker is not automatically a parent unless the text supports that parental relation.\n"
-    "- For role changes: when someone is appointed or replaces another in a role (e.g., teacher), "
-    "create relationship edges based on that role to relevant characters in the text.\n"
-    "- Set ends_here=true only when the quoted evidence itself shows that a relationship or "
-    "sentiment ends in this passage (e.g., fired, retired, died, quit, left, broke up, graduated).\n"
-    "- Do not invent relationships, sentiments, or endings that are not supported by the text.\n"
+    "- Extract all meaningful character-to-character connections.\n"
+    "- A connection does not need to be friendship, family, or a social bond. "
+    "Characters who meet, speak, observe, help, command, teach, follow, visit, "
+    "or otherwise directly interact should receive an edge.\n"
+    "- When the exact relationship is unclear, use relationship type 'unknown'. "
+    "Do not omit the edge just because the social nature of the relationship is uncertain.\n"
+    "- Use specific relationship labels when supported by evidence "
+    "(friend, teacher, student, servant, leader, protector, etc.).\n"
+    "- Use unknown when the text only establishes interaction without a clear relationship.\n"
+    "- Do not create edges between characters who only appear in separate unrelated scenes "
+    "unless the text establishes a connection.\n"
     "- Evidence must be an exact quote from the text.\n"
     "- Leave position and end_position null; the pipeline will fill temporal positions."
 )
 
+@traceable(
+    run_type="llm",
+    name="Relationship Extraction",
+)
 async def extract_relationships(text: str, api_key: str | None = None) -> ExtractionResult:
     """
     Extract relationships for a single text chunk and return an ExtractionResult instance.
@@ -66,8 +68,6 @@ async def extract_relationships_batch(texts: list[str],api_key: str | None = Non
     model = _get_chat_llm(provider="google", api_key=api_key)
 
     structured_model = model.with_structured_output(BatchExtractionResult)
-    print(model.__class__)
-    print(structured_model.__class__)
     template = (
         "You are given a JSON payload containing multiple independent text chunks.\n"
         "Process each chunk independently.\n\n"
@@ -79,8 +79,6 @@ async def extract_relationships_batch(texts: list[str],api_key: str | None = Non
     prompt = ChatPromptTemplate.from_template(template)
 
     chain = prompt | structured_model
-    print(len(payload_json))
-    print(sum(len(t) for t in texts))
     parsed_batch = await chain.ainvoke(
         {"payload": payload_json}
     )

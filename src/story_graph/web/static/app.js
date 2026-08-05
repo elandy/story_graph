@@ -172,7 +172,7 @@ function renderJobs(jobs) {
   if (!jobs.length) {
     jobList.innerHTML = allJobs.length
       ? '<div class="job-row">No jobs match the current filters.</div>'
-      : '<div class="job-row">No jobs yet.</div>';
+      : '<div class="job-row">No jobs yet. Upload a book above to start your first graph.</div>';
     return;
   }
 
@@ -214,7 +214,13 @@ function renderJobRow(job) {
 
   const downloadButton = job.state === "completed" && job.graph_download_url
     ? `<a href="${job.graph_download_url}">
-         <button class="button-secondary button-small" type="button">Download</button>
+         <button class="button-secondary button-small" type="button">HTML</button>
+       </a>`
+    : "";
+
+  const downloadJsonButton = job.state === "completed" && job.graph_json_url
+    ? `<a href="${job.graph_json_url}">
+         <button class="button-secondary button-small" type="button">JSON</button>
        </a>`
     : "";
   const resumeButton = ["failed", "paused"].includes(job.state)
@@ -247,7 +253,7 @@ function renderJobRow(job) {
     : "";
 
   return `
-    <article class="${rowClasses}" data-job-row="${job.job_id}" tabindex="0">
+    <article class="${rowClasses}" data-job-row="${job.job_id}" data-state="${escapeHtml(job.state || "")}" tabindex="0">
       <div class="job-head">
         <div class="job-main">
           <div class="job-title">${escapeHtml(job.original_filename || "upload")}</div>
@@ -264,7 +270,14 @@ function renderJobRow(job) {
         ${messageBlock}
         ${progressBlock}
       </div>
-      <div class="job-actions">${pauseButton}${resumeButton}${deleteButton}${openButton}${downloadButton}</div>
+      <div class="job-actions">
+        ${pauseButton}
+        ${resumeButton}
+        ${deleteButton}
+        ${openButton}
+        ${downloadButton}
+        ${downloadJsonButton}
+      </div>
     </article>
   `;
 }
@@ -311,7 +324,17 @@ async function selectJob(jobId) {
 
 async function resumeJob(jobId) {
   try {
-    const response = await fetch(`/jobs/${jobId}/retry`, { method: "POST" });
+    const formData = new FormData();
+    const apiKeyInput = form.elements.namedItem("api_key");
+    if (apiKeyInput instanceof HTMLInputElement) {
+      formData.append("api_key", apiKeyInput.value);
+    }
+
+    const response = await fetch(`/jobs/${jobId}/retry`, {
+      method: "POST",
+      body: formData,
+    });
+
     const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Failed to resume job.");

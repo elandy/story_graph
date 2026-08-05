@@ -1,6 +1,11 @@
 import networkx as nx
+from langsmith import traceable
 
 
+@traceable(
+    run_type="chain",
+    name="Build Graph",
+)
 def build_graph(registry, relationships, sentiments):
 
     G = nx.MultiDiGraph()
