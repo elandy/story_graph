@@ -1,7 +1,7 @@
 [project]
 name = "story-graph"
 version = "0.1.0"
-description = "Add your description here"
+description = "Generate character relationship graphs from fictional stories"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -10,7 +10,7 @@ dependencies = [
     "beautifulsoup4>=4.15.0",
     "docx2txt>=0.9",
     "ebooklib>=0.20",
-    "fastapi>=0.141.1",
+    "fastapi[standard]>=0.141.1",
     "langchain>=1.3.14",
     "langchain-community>=0.4.2",
     "langchain-google-genai>=4.3.2",
@@ -37,3 +37,10 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv.workspace]
+members = [
+    "story_graph",
+]
+[tool.fastapi]
+entrypoint = "story_graph.web.app:app"
