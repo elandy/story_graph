@@ -7,7 +7,10 @@ The project supports two entry points:
 * **CLI** for running the pipeline directly against a local text file.
 * **FastAPI web application** that executes the same pipeline asynchronously while persisting jobs and artifacts in PostgreSQL.
 
----
+![Screenshot](/cap1.png)
+![Screenshot](/cap2.png)
+![Screenshot](/cap3.png)
+![Screenshot](/cap4.png)
 
 # Requirements
 
